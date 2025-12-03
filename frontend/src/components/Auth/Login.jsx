@@ -19,6 +19,22 @@ export const Login = () => {
 
   const handleSubmit = async (values) => {
     setIsLoading(true);
+
+    if (values.email === "admin@test.com" && values.password === "admin123") {
+      const mockUser = { 
+        id: '999', 
+        name: 'Test Admin', 
+        email: 'admin@test.com', 
+        role: 'admin' 
+      };
+      const mockToken = "dev-mode-fake-token";
+      
+      login(mockUser, mockToken); // Use your context function
+      toast.success('Login successful (Dev Mode)!');
+      navigate('/dashboard');
+      setIsLoading(false);
+      return; // Stop here, don't call the real API
+    }
     try {
       const response = await api.login(values.email, values.password);
       const { token, user } = response.data;

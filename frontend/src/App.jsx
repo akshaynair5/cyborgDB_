@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AppProvider, useApp } from './context/AppContext';
+import { AppProvider, useApp } from "./context/AppContext";
 import { Toaster } from 'react-hot-toast';
 import { Login } from './components/Auth/Login';
 import { Dashboard } from './pages/Dashboard';

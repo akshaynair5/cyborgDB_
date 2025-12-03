@@ -118,7 +118,7 @@ select:focus {
 /* Loading Animation */
 @keyframes spin {
   to {
-    @apply rotate-360;
+    transform: rotate(360deg);
   }
 }
 
