@@ -13,8 +13,8 @@ const router = Router();
 
 
 router.route('/')
-.post(verifyJWT, createHospital)
-.get(verifyJWT, getHospitals);
+.post(createHospital)
+.get(getHospitals);
 
 
 router.route('/:id')

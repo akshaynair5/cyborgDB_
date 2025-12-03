@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 import {DB_NAME} from "../constants.js"
-// import dotenv from 'dotenv'
+import dotenv from 'dotenv'
 
-// dotenv.config({
-//     path: './env'
-// });
+dotenv.config({
+    path: './env'
+});
 
 const dbConnect = async () =>{
     try{

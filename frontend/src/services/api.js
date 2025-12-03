@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-// CHANGE THIS LINE: Use import.meta.env.VITE_... for Vite projects
+// Base URL from Vite environment OR default to localhost
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 class APIClient {
@@ -12,6 +12,7 @@ class APIClient {
       },
     });
 
+    // Attach JWT to requests
     this.client.interceptors.request.use((config) => {
       const token = localStorage.getItem('token');
       if (token) {
@@ -20,6 +21,7 @@ class APIClient {
       return config;
     });
 
+    // Auto-logout on 401
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
@@ -33,39 +35,61 @@ class APIClient {
     );
   }
 
-  // Auth
-  login(email, password) {
-    return this.client.post('/auth/login', { email, password });
+  /* --------------------------------------------------------------------------
+   * AUTH + USERS
+   * Backend Routes:
+   * POST /users/register
+   * POST /users/login
+   * POST /users/logout
+   * GET /users
+   * GET /users/:id
+   * PATCH /users/:id
+   * DELETE /users/:id
+   * -------------------------------------------------------------------------- */
+
+  registerUser(data) {
+    return this.client.post('/users/register', data);
   }
 
-  logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  loginUser(email, password) {
+    return this.client.post('/users/login', { email, password });
   }
 
-  // Users
+  logoutUser() {
+    return this.client.post('/users/logout');
+  }
+
   getUsers() {
     return this.client.get('/users');
   }
 
-  createUser(data) {
-    return this.client.post('/users', data);
+  getUserById(id) {
+    return this.client.get(`/users/${id}`);
   }
 
   updateUser(id, data) {
-    return this.client.put(`/users/${id}`, data);
+    return this.client.patch(`/users/${id}`, data);
   }
 
   deleteUser(id) {
     return this.client.delete(`/users/${id}`);
   }
 
-  // Patients
-  getPatients(hospitalId) {
-    return this.client.get(`/patients`, { params: { hospital: hospitalId } });
+  /* --------------------------------------------------------------------------
+   * PATIENTS
+   * Backend Routes:
+   * POST /patients
+   * GET /patients
+   * GET /patients/:id
+   * PATCH /patients/:id
+   * DELETE /patients/:id
+   * -------------------------------------------------------------------------- */
+
+  getPatients() {
+    return this.client.get('/patients');
   }
 
-  getPatient(id) {
+  getPatientById(id) {
     return this.client.get(`/patients/${id}`);
   }
 
@@ -74,23 +98,29 @@ class APIClient {
   }
 
   updatePatient(id, data) {
-    return this.client.put(`/patients/${id}`, data);
+    return this.client.patch(`/patients/${id}`, data);
   }
 
   deletePatient(id) {
     return this.client.delete(`/patients/${id}`);
   }
 
-  searchPatients(query, hospitalId) {
-    return this.client.get('/patients/search', { params: { q: query, hospital: hospitalId } });
+  /* --------------------------------------------------------------------------
+   * ADMISSIONS
+   * Backend Routes:
+   * POST /admissions
+   * GET /admissions
+   * GET /admissions/:id
+   * PATCH /admissions/:id
+   * DELETE /admissions/:id
+   * POST /admissions/:id/discharge
+   * -------------------------------------------------------------------------- */
+
+  getAdmissions() {
+    return this.client.get('/admissions');
   }
 
-  // Admissions
-  getAdmissions(hospitalId) {
-    return this.client.get('/admissions', { params: { hospital: hospitalId } });
-  }
-
-  getAdmission(id) {
+  getAdmissionById(id) {
     return this.client.get(`/admissions/${id}`);
   }
 
@@ -99,19 +129,32 @@ class APIClient {
   }
 
   updateAdmission(id, data) {
-    return this.client.put(`/admissions/${id}`, data);
+    return this.client.patch(`/admissions/${id}`, data);
+  }
+
+  deleteAdmission(id) {
+    return this.client.delete(`/admissions/${id}`);
   }
 
   dischargePatient(id, data) {
     return this.client.post(`/admissions/${id}/discharge`, data);
   }
 
-  // Encounters
-  getEncounters(patientId) {
-    return this.client.get('/encounters', { params: { patient: patientId } });
+  /* --------------------------------------------------------------------------
+   * ENCOUNTERS
+   * Backend:
+   * POST /encounters
+   * GET /encounters
+   * GET /encounters/:id
+   * PATCH /encounters/:id
+   * DELETE /encounters/:id
+   * -------------------------------------------------------------------------- */
+
+  getEncounters() {
+    return this.client.get('/encounters');
   }
 
-  getEncounter(id) {
+  getEncounterById(id) {
     return this.client.get(`/encounters/${id}`);
   }
 
@@ -120,12 +163,29 @@ class APIClient {
   }
 
   updateEncounter(id, data) {
-    return this.client.put(`/encounters/${id}`, data);
+    return this.client.patch(`/encounters/${id}`, data);
   }
 
-  // Prescriptions
-  getPrescriptions(patientId) {
-    return this.client.get('/prescriptions', { params: { patient: patientId } });
+  deleteEncounter(id) {
+    return this.client.delete(`/encounters/${id}`);
+  }
+
+  /* --------------------------------------------------------------------------
+   * PRESCRIPTIONS
+   * Backend:
+   * POST /prescriptions
+   * GET /prescriptions
+   * GET /prescriptions/:id
+   * PATCH /prescriptions/:id
+   * DELETE /prescriptions/:id
+   * -------------------------------------------------------------------------- */
+
+  getPrescriptions() {
+    return this.client.get('/prescriptions');
+  }
+
+  getPrescriptionById(id) {
+    return this.client.get(`/prescriptions/${id}`);
   }
 
   createPrescription(data) {
@@ -133,38 +193,146 @@ class APIClient {
   }
 
   updatePrescription(id, data) {
-    return this.client.put(`/prescriptions/${id}`, data);
+    return this.client.patch(`/prescriptions/${id}`, data);
   }
 
-  // Lab Results
-  getLabResults(patientId) {
-    return this.client.get('/lab-results', { params: { patient: patientId } });
+  deletePrescription(id) {
+    return this.client.delete(`/prescriptions/${id}`);
+  }
+
+  /* --------------------------------------------------------------------------
+   * LAB RESULTS
+   * Backend:
+   * POST /lab
+   * GET /lab
+   * GET /lab/:id
+   * PATCH /lab/:id
+   * DELETE /lab/:id
+   * -------------------------------------------------------------------------- */
+
+  getLabResults() {
+    return this.client.get('/lab');
+  }
+
+  getLabResultById(id) {
+    return this.client.get(`/lab/${id}`);
   }
 
   createLabResult(data) {
-    return this.client.post('/lab-results', data);
+    return this.client.post('/lab', data);
   }
 
   updateLabResult(id, data) {
-    return this.client.put(`/lab-results/${id}`, data);
+    return this.client.patch(`/lab/${id}`, data);
   }
 
-  // Imaging
-  getImagingReports(patientId) {
-    return this.client.get('/imaging-reports', { params: { patient: patientId } });
+  deleteLabResult(id) {
+    return this.client.delete(`/lab/${id}`);
+  }
+
+  /* --------------------------------------------------------------------------
+   * IMAGING REPORTS
+   * Backend:
+   * POST /imaging
+   * GET /imaging
+   * GET /imaging/:id
+   * PATCH /imaging/:id
+   * DELETE /imaging/:id
+   * -------------------------------------------------------------------------- */
+
+  getImagingReports() {
+    return this.client.get('/imaging');
+  }
+
+  getImagingReportById(id) {
+    return this.client.get(`/imaging/${id}`);
   }
 
   createImagingReport(data) {
-    return this.client.post('/imaging-reports', data);
+    return this.client.post('/imaging', data);
   }
 
-  // Diagnoses
-  getDiagnoses(hospitalId) {
-    return this.client.get('/diagnoses', { params: { hospital: hospitalId } });
+  updateImagingReport(id, data) {
+    return this.client.patch(`/imaging/${id}`, data);
+  }
+
+  deleteImagingReport(id) {
+    return this.client.delete(`/imaging/${id}`);
+  }
+
+  /* --------------------------------------------------------------------------
+   * DIAGNOSIS
+   * Backend:
+   * POST /diagnosis
+   * GET /diagnosis
+   * GET /diagnosis/:id
+   * PATCH /diagnosis/:id
+   * DELETE /diagnosis/:id
+   * -------------------------------------------------------------------------- */
+
+  getDiagnoses() {
+    return this.client.get('/diagnosis');
+  }
+
+  getDiagnosisById(id) {
+    return this.client.get(`/diagnosis/${id}`);
   }
 
   createDiagnosis(data) {
-    return this.client.post('/diagnoses', data);
+    return this.client.post('/diagnosis', data);
+  }
+
+  updateDiagnosis(id, data) {
+    return this.client.patch(`/diagnosis/${id}`, data);
+  }
+
+  deleteDiagnosis(id) {
+    return this.client.delete(`/diagnosis/${id}`);
+  }
+
+  /* --------------------------------------------------------------------------
+   * AUDIT LOGS
+   * Backend:
+   * GET /audit
+   * GET /audit/:id
+   * -------------------------------------------------------------------------- */
+
+  getAuditLogs() {
+    return this.client.get('/audit');
+  }
+
+  getAuditLogById(id) {
+    return this.client.get(`/audit/${id}`);
+  }
+
+  /* --------------------------------------------------------------------------
+   * HOSPITALS
+   * Backend:
+   * POST /hospitals
+   * GET /hospitals
+   * GET /hospitals/:id
+   * PATCH /hospitals/:id
+   * DELETE /hospitals/:id
+   * -------------------------------------------------------------------------- */
+
+  getHospitals() {
+    return this.client.get('/hospitals');
+  }
+
+  getHospitalById(id) {
+    return this.client.get(`/hospitals/${id}`);
+  }
+
+  createHospital(data) {
+    return this.client.post('/hospitals', data);
+  }
+
+  updateHospital(id, data) {
+    return this.client.patch(`/hospitals/${id}`, data);
+  }
+
+  deleteHospital(id) {
+    return this.client.delete(`/hospitals/${id}`);
   }
 }
 

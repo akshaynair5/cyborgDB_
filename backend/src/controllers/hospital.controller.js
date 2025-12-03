@@ -5,11 +5,10 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 
 export const createHospital = asyncHandler(async (req, res) => {
-const data = req.body;
+    const data = req.body;
 
-
-const hospital = await Hospital.create(data);
-return res.status(201).json(new ApiResponse(201, { hospital }));
+    const hospital = await Hospital.create(data);
+    return res.status(201).json(new ApiResponse(201, { hospital }));
 });
 
 
