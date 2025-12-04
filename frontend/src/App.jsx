@@ -2,18 +2,39 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from "./context/AppContext";
 import { Toaster } from 'react-hot-toast';
+
 import { Login } from './components/Auth/Login';
+
+// Dashboard
 import { Dashboard } from './pages/Dashboard';
+
+// Patient
 import { PatientList } from './components/Patient/PatientList';
 import { PatientForm } from './components/Patient/PatientForm';
 import { PatientDetail } from './components/Patient/PatientDetail';
+
+// Admissions
 import { AdmissionList } from './components/Admission/AdmissionList';
 import { AdmissionForm } from './components/Admission/AdmissionForm';
+
+// Encounters
 import { EncounterForm } from './components/Encounter/EncounterForm';
+
+// Prescriptions
 import { PrescriptionForm } from './components/Prescription/PrescriptionForm';
+import { PrescriptionList } from './components/Prescription/PrescriptionList';
+
+// Lab Results
 import { LabResultForm } from './components/LabResult/LabResultForm';
+import { LabResultList } from './components/LabResult/LabResultList';
+
+// Imaging
+import { ImagingList } from './components/Imaging/ImagingList';
+
 import Layout from './components/Common/Layout';
 
+
+// 🔒 Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
   const { user, isLoading } = useApp();
 
@@ -28,12 +49,11 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
+  if (!user) return <Navigate to="/login" />;
 
   return <Layout>{children}</Layout>;
 };
+
 
 function AppContent() {
   const { user, isLoading } = useApp();
@@ -51,7 +71,7 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Auth Routes */}
+      {/* Auth */}
       <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
 
       {/* Dashboard */}
@@ -64,7 +84,7 @@ function AppContent() {
         }
       />
 
-      {/* Patient Routes */}
+      {/* Patients */}
       <Route
         path="/patients"
         element={
@@ -98,7 +118,7 @@ function AppContent() {
         }
       />
 
-      {/* Admission Routes */}
+      {/* Admissions */}
       <Route
         path="/admissions"
         element={
@@ -124,7 +144,7 @@ function AppContent() {
         }
       />
 
-      {/* Encounter Routes */}
+      {/* Encounters */}
       <Route
         path="/encounters/new"
         element={
@@ -142,7 +162,15 @@ function AppContent() {
         }
       />
 
-      {/* Prescription Routes */}
+      {/* Prescriptions */}
+      <Route
+        path="/prescriptions"
+        element={
+          <ProtectedRoute>
+            <PrescriptionList />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/prescriptions/new"
         element={
@@ -160,7 +188,15 @@ function AppContent() {
         }
       />
 
-      {/* Lab Result Routes */}
+      {/* Lab Results */}
+      <Route
+        path="/lab-results"
+        element={
+          <ProtectedRoute>
+            <LabResultList />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/lab-results/new"
         element={
@@ -178,12 +214,23 @@ function AppContent() {
         }
       />
 
-      {/* Default Route */}
+      {/* Imaging */}
+      <Route
+        path="/imaging-reports"
+        element={
+          <ProtectedRoute>
+            <ImagingList />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Defaults */}
       <Route path="/" element={<Navigate to="/dashboard" />} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   );
 }
+
 
 function App() {
   return (

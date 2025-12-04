@@ -30,7 +30,7 @@ export const AdmissionList = () => {
   const fetchAdmissions = async () => {
     try {
       const response = await api.getAdmissions(user?.hospital || '');
-      setAdmissions(response.data);
+      setAdmissions(response.data.message.admissions || []);
     } catch (error) {
       toast.error('Failed to fetch admissions');
     } finally {

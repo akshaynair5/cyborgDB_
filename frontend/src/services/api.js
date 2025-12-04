@@ -211,23 +211,23 @@ class APIClient {
    * -------------------------------------------------------------------------- */
 
   getLabResults() {
-    return this.client.get('/lab');
+    return this.client.get('/labs');
   }
 
   getLabResultById(id) {
-    return this.client.get(`/lab/${id}`);
+    return this.client.get(`/labs/${id}`);
   }
 
   createLabResult(data) {
-    return this.client.post('/lab', data);
+    return this.client.post('/labs', data);
   }
 
   updateLabResult(id, data) {
-    return this.client.patch(`/lab/${id}`, data);
+    return this.client.patch(`/labs/${id}`, data);
   }
 
   deleteLabResult(id) {
-    return this.client.delete(`/lab/${id}`);
+    return this.client.delete(`/labs/${id}`);
   }
 
   /* --------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import toast from 'react-hot-toast';
 export const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useApp();
+
   const [stats, setStats] = useState({
     patients: 0,
     activeAdmissions: 0,
@@ -25,40 +26,76 @@ export const Dashboard = () => {
     labResults: 0,
     imagingReports: 0,
   });
+
   const [recentItems, setRecentItems] = useState({
     patients: [],
-    encounters: [],
     admissions: [],
   });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("➡️ Logged-in user:", user);
     fetchDashboardData();
   }, []);
 
+  // ------------------------------------------------------------------
+  // FETCH ALL DASHBOARD DATA
+  // ------------------------------------------------------------------
   const fetchDashboardData = async () => {
     try {
-      const patientsRes = await api.getPatients(user?.hospital || '');
-      const admissionsRes = await api.getAdmissions(user?.hospital || '');
+      setLoading(true);
 
-      setStats((prev) => ({
-        ...prev,
-        patients: patientsRes.data.length,
-        activeAdmissions: admissionsRes.data.filter((a) => a.status === 'active').length,
-      }));
+      // ------------ PATIENTS ------------
+      const patientsRes = await api.getPatients();
+      console.log("📌 Patients fetched:", patientsRes.data);
 
-      setRecentItems((prev) => ({
-        ...prev,
-        patients: patientsRes.data.slice(0, 5),
-        admissions: admissionsRes.data.slice(0, 5),
-      }));
+      // ------------ ADMISSIONS ------------
+      const admissionsRes = await api.getAdmissions();
+      console.log("📌 Admissions fetched:", admissionsRes.data);
+
+      // ------------ ENCOUNTERS ------------
+      const encountersRes = await api.getEncounters();
+      console.log("📌 Encounters fetched:", encountersRes.data);
+
+      // ------------ PRESCRIPTIONS ------------
+      const prescriptionsRes = await api.getPrescriptions();
+      console.log("📌 Prescriptions fetched:", prescriptionsRes.data);
+
+      // ------------ LAB RESULTS ------------
+      const labRes = await api.getLabResults();
+      console.log("📌 Lab results fetched:", labRes.data);
+
+      // ------------ IMAGING REPORTS ------------
+      const imagingRes = await api.getImagingReports();
+      console.log("📌 Imaging reports fetched:", imagingRes.data);
+
+      // ------------ UPDATE STATS ------------
+      setStats({
+        patients: patientsRes.data.length || 0,
+        activeAdmissions: admissionsRes.data.length || 0,
+        encounters: encountersRes.data.length || 0,
+        prescriptions: prescriptionsRes.data.length || 0,
+        labResults: labRes.data.length || 0,
+        imagingReports: imagingRes.data.length || 0,
+      });
+
+      // ------------ UPDATE RECENT ITEMS ------------
+      setRecentItems({
+        patients: patientsRes.data || [],
+        admissions: admissionsRes.data || [],
+      });
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      console.error("❌ Dashboard fetch failed:", error);
+      toast.error("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
   };
 
+  // ------------------------------------------------------------------
+  // COMPONENTS
+  // ------------------------------------------------------------------
   const StatCard = ({ icon: Icon, label, value, color, trend }) => (
     <div className={`bg-white rounded-lg shadow p-6 border-l-4 border-${color}-500`}>
       <div className="flex items-center justify-between">
@@ -78,6 +115,9 @@ export const Dashboard = () => {
     </div>
   );
 
+  // ------------------------------------------------------------------
+  // LOADING SCREEN
+  // ------------------------------------------------------------------
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -89,13 +129,20 @@ export const Dashboard = () => {
     );
   }
 
+  // ------------------------------------------------------------------
+  // MAIN RENDER
+  // ------------------------------------------------------------------
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600 mt-2">
-          Welcome back, <span className="font-semibold">{user?.firstName} {user?.lastName}</span>!
+          Welcome back,{" "}
+          <span className="font-semibold">
+            {user?.firstName} {user?.lastName}
+          </span>
+          !
         </p>
         <p className="text-sm text-gray-500 mt-1">
           Role: <span className="capitalize font-medium">{user?.role}</span>
@@ -105,46 +152,14 @@ export const Dashboard = () => {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <StatCard icon={Users} label="Total Patients" value={stats.patients} color="blue" trend={12} />
-        <StatCard
-          icon={Activity}
-          label="Active Admissions"
-          value={stats.activeAdmissions}
-          color="green"
-        />
-        <StatCard
-          icon={BarChart3}
-          label="Encounters"
-          value={stats.encounters}
-          color="purple"
-        />
+        <StatCard icon={Activity} label="Active Admissions" value={stats.activeAdmissions} color="green" />
+        <StatCard icon={BarChart3} label="Encounters" value={stats.encounters} color="purple" />
         <StatCard icon={Pill} label="Prescriptions" value={stats.prescriptions} color="yellow" />
         <StatCard icon={TestTube} label="Lab Results" value={stats.labResults} color="pink" />
         <StatCard icon={ImageIcon} label="Imaging Reports" value={stats.imagingReports} color="indigo" />
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'New Patient', icon: Users, path: '/patients/new', color: 'blue' },
-            { label: 'Admit Patient', icon: Activity, path: '/admissions/new', color: 'green' },
-            { label: 'New Encounter', icon: BarChart3, path: '/encounters/new', color: 'purple' },
-            { label: 'Prescription', icon: Pill, path: '/prescriptions/new', color: 'yellow' },
-          ].map((action, i) => (
-            <button
-              key={i}
-              onClick={() => navigate(action.path)}
-              className={`bg-${action.color}-600 hover:bg-${action.color}-700 text-white px-4 py-3 rounded-lg transition flex items-center justify-center gap-2 font-medium`}
-            >
-              <action.icon size={18} />
-              <span className="hidden sm:inline">{action.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent Items */}
+      {/* Recent Items: Patients + Admissions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Patients */}
         <div className="bg-white rounded-lg shadow p-6">
@@ -157,6 +172,7 @@ export const Dashboard = () => {
               View All <ArrowRight size={16} />
             </button>
           </div>
+
           <div className="space-y-3">
             {recentItems.patients.length > 0 ? (
               recentItems.patients.map((patient) => (
@@ -169,8 +185,9 @@ export const Dashboard = () => {
                     <p className="font-medium text-gray-900">
                       {patient.firstName} {patient.lastName}
                     </p>
-                    <p className="text-sm text-gray-500">{patient.hospitalId}</p>
+                    <p className="text-sm text-gray-500">{patient.gender || 'N/A'}</p>
                   </div>
+
                   <p className="text-sm text-gray-600">
                     {new Date(patient.createdAt).toLocaleDateString()}
                   </p>
@@ -193,6 +210,7 @@ export const Dashboard = () => {
               View All <ArrowRight size={16} />
             </button>
           </div>
+
           <div className="space-y-3">
             {recentItems.admissions.length > 0 ? (
               recentItems.admissions.map((admission) => (
@@ -202,11 +220,14 @@ export const Dashboard = () => {
                   onClick={() => navigate(`/admissions/${admission._id}`)}
                 >
                   <div>
-                    <p className="font-medium text-gray-900">Ward {admission.ward || 'N/A'}</p>
+                    <p className="font-medium text-gray-900">
+                      Ward {admission.ward || 'N/A'}
+                    </p>
                     <p className="text-sm text-gray-500">
                       {new Date(admission.admittedAt).toLocaleDateString()}
                     </p>
                   </div>
+
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-semibold ${
                       admission.status === 'active'

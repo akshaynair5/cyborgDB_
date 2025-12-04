@@ -30,7 +30,7 @@ export const PatientList = () => {
   const fetchPatients = async () => {
     try {
       const response = await api.getPatients(user?.hospital || '');
-      setPatients(response.data);
+      setPatients(response.data.message.patients || []);
     } catch (error) {
       toast.error('Failed to fetch patients');
       console.error(error);

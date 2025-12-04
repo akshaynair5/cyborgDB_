@@ -20,9 +20,9 @@ export const PatientDetail = () => {
   const fetchPatientData = async () => {
     try {
       const [patientRes, encountersRes, prescriptionsRes] = await Promise.all([
-        api.getPatient(id),
-        api.getEncounters(id),
-        api.getPrescriptions(id),
+        api.getPatientById(id),
+        api.getEncounterById(id),
+        api.getPrescriptionById(id),
       ]);
       setPatient(patientRes.data);
       setEncounters(encountersRes.data);

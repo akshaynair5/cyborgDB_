@@ -62,18 +62,22 @@ export const Login = () => {
     setIsLoading(true);
     try {
       const response = await api.loginUser(values.email, values.password);
-      const { user, token } = response.data;
+      console.log('Login response:', response);
+      const user = response.data.message.user;
+      const token = response.data.message.accessToken;
 
       login(user, token);
       toast.success('Login successful');
       navigate('/dashboard');
 
     } catch (error) {
+      console.error(error);
       toast.error(error.response?.data?.message || 'Login failed');
     } finally {
       setIsLoading(false);
     }
   };
+
 
   // ------------------------ REGISTER ------------------------
   const handleRegister = async (values) => {
@@ -86,7 +90,8 @@ export const Login = () => {
       console.log('Register payload:', payload);
       try{
         await api.registerUser(payload);
-        toast.success('Registration successful');
+        toast.success("Registration successful");
+        navigate('/login');
       }
       catch(err){
         console.error('Registration error:', err);

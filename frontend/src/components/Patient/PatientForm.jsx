@@ -33,7 +33,7 @@ export const PatientForm = () => {
 
   const fetchPatient = async () => {
     try {
-      const response = await api.getPatient(id);
+      const response = await api.getPatientById(id);
       setPatient(response.data);
     } catch (error) {
       toast.error('Failed to fetch patient');

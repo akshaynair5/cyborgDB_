@@ -49,7 +49,7 @@ export const EncounterForm = () => {
 
   const fetchEncounter = async () => {
     try {
-      const response = await api.getEncounter(id);
+      const response = await api.getEncounterById(id);
       setEncounter(response.data);
     } catch (error) {
       toast.error('Failed to fetch encounter');

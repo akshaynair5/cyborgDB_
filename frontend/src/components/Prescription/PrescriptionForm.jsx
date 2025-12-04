@@ -40,7 +40,7 @@ export const PrescriptionForm = () => {
   const fetchPatients = async () => {
     try {
       const response = await api.getPatients(user?.hospital || '');
-      setPatients(response.data);
+      setPatients(response.data.message.patients || []);
     } catch (error) {
       toast.error('Failed to fetch patients');
     }
@@ -48,7 +48,7 @@ export const PrescriptionForm = () => {
 
   const fetchPrescription = async () => {
     try {
-      const response = await api.getPrescriptions(id);
+      const response = await api.getPrescriptionById(id);
       if (response.data && response.data.length > 0) {
         setPrescription(response.data[0]);
       }

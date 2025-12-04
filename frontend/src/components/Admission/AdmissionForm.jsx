@@ -49,8 +49,8 @@ export const AdmissionForm = () => {
 
   const fetchAdmission = async () => {
     try {
-      const response = await api.getAdmission(id);
-      setAdmission(response.data);
+      const response = await api.getAdmissionById(id);
+      setAdmission(response.data.message.admissions || []);
     } catch (error) {
       toast.error('Failed to fetch admission');
     } finally {

@@ -47,7 +47,7 @@ export const LabResultForm = () => {
 
   const fetchLabResult = async () => {
     try {
-      const response = await api.getLabResults(id);
+      const response = await api.getLabResultById(id);
       if (response.data && response.data.length > 0) {
         setLabResult(response.data[0]);
       }
