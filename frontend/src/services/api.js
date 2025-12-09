@@ -334,6 +334,32 @@ class APIClient {
   deleteHospital(id) {
     return this.client.delete(`/hospitals/${id}`);
   }
+
+  /* --------------------------------------------------------------------------
+   * DASHBOARD
+   * GET /dashboard/summary
+   * GET /dashboard/trends?days=7
+   * -------------------------------------------------------------------------- */
+
+  getDashboardSummary() {
+    return this.client.get('/dashboard/summary');
+  }
+
+  getDashboardTrends(days = 7) {
+    return this.client.get(`/dashboard/trends?days=${days}`);
+  }
+
+  getDashboardOverview() {
+    return this.client.get('/dashboard/overview');
+  }
+
+  getDashboardAnalytics() {
+    return this.client.get('/dashboard/analytics');
+  }
+
+  getDashboardAlerts() {
+    return this.client.get('/dashboard/alerts');
+  }
 }
 
 export default new APIClient();

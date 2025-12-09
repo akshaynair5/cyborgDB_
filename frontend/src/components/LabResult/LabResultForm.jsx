@@ -114,7 +114,7 @@ export const LabResultForm = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select a patient</option>
-                    {patients.map((p) => (
+                    {patients.length > 0 &&patients.map((p) => (
                       <option key={p._id} value={p._id}>
                         {p.firstName} {p.lastName} ({p.hospitalId})
                       </option>
