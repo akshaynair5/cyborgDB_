@@ -23,12 +23,18 @@ export const LabResultForm = () => {
   const { id } = useParams();
   const { user } = useApp();
   const [patients, setPatients] = useState([]);
+  const [encounters, setEncounters] = useState([]);
   const [labResult, setLabResult] = useState(null);
   const [loading, setLoading] = useState(!!id);
 
   useEffect(() => {
     fetchPatients();
   }, []);
+
+  useEffect(() => {
+    const pid = labResult?.patient || null;
+    if (pid) fetchEncountersForPatient(pid);
+  }, [labResult]);
 
   useEffect(() => {
     if (id) {
@@ -39,7 +45,8 @@ export const LabResultForm = () => {
   const fetchPatients = async () => {
     try {
       const response = await api.getPatients(user?.hospital || '');
-      setPatients(response.data);
+      const pts = response?.data?.data?.patients || response?.data?.patients || response?.data || [];
+      setPatients(pts);
     } catch (error) {
       toast.error('Failed to fetch patients');
     }
@@ -60,6 +67,7 @@ export const LabResultForm = () => {
 
   const initialValues = labResult || {
     patient: '',
+    encounter: '',
     orderedBy: user?._id || '',
     collectedAt: new Date().toISOString().split('T')[0],
     reportedAt: new Date().toISOString().split('T')[0],
@@ -80,6 +88,16 @@ export const LabResultForm = () => {
       navigate('/lab-results');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save lab result');
+    }
+  };
+
+  const fetchEncountersForPatient = async (patientId) => {
+    try {
+      const res = await api.getEncountersForPatient(patientId);
+      const all = res?.data?.data?.encounters || res?.data?.encounters || res?.data || [];
+      setEncounters(all);
+    } catch (err) {
+      setEncounters([]);
     }
   };
 
@@ -108,19 +126,38 @@ export const LabResultForm = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
-                  <Field
-                    as="select"
-                    name="patient"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select a patient</option>
-                    {patients.length > 0 &&patients.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        {p.firstName} {p.lastName} ({p.hospitalId})
+                  <Field name="patient">
+                    {({ field, form }) => (
+                      <select
+                        {...field}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => {
+                          form.setFieldValue('patient', e.target.value);
+                          fetchEncountersForPatient(e.target.value);
+                        }}
+                      >
+                        <option value="">Select a patient</option>
+                        {patients.length > 0 && patients.map((p) => (
+                          <option key={p._id} value={p._id}>
+                            {p.firstName} {p.lastName} ({p.hospitalId})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Encounter (optional)</label>
+                  <Field as="select" name="encounter" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select an encounter (optional)</option>
+                    {encounters.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {new Date(c.startedAt).toLocaleString()} — {c.encounterType}
                       </option>
                     ))}
                   </Field>
-                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
                 </div>
 
                 <div>

@@ -28,6 +28,13 @@ export const getPrescriptions = asyncHandler(async (req, res) => {
 });
 
 
+export const getPrescriptionsForPatient = asyncHandler(async (req, res) => {
+    const patientId = req.params.id;
+    const prescriptions = await Prescription.find({ hospital: req.user.hospital, patient: patientId }).sort({ createdAt: -1 });
+    return res.status(200).json(new ApiResponse(200, { prescriptions }));
+});
+
+
 export const getPrescriptionById = asyncHandler(async (req, res) => {
     const prescription = await Prescription.findById(req.params.id);
     if (!prescription) throw new ApiError(404, "Prescription not found");

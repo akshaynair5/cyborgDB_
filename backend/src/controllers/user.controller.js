@@ -106,6 +106,17 @@ export const getUsers = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, { users }));
 });
 
+export const getUsersByRoles = asyncHandler(async (req, res) => {
+    const rolesQuery = req.query.roles || '';
+    const roles = Array.isArray(rolesQuery) ? rolesQuery : String(rolesQuery).split(',').map(r => r.trim()).filter(Boolean);
+    if (!roles || roles.length === 0) {
+        throw new ApiError(400, 'roles query parameter is required, e.g. ?roles=doctor,nurse');
+    }
+
+    const users = await User.find({ hospital: req.user.hospital, role: { $in: roles } }).select('-password -refreshToken');
+    return res.status(200).json(new ApiResponse(200, { users }));
+});
+
 
 export const getUserById = asyncHandler(async (req, res) => {
     const user = await User.findById(req.params.id);

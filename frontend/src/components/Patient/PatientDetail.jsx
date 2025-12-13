@@ -21,12 +21,17 @@ export const PatientDetail = () => {
     try {
       const [patientRes, encountersRes, prescriptionsRes] = await Promise.all([
         api.getPatientById(id),
-        api.getEncounterById(id),
-        api.getPrescriptionById(id),
+        api.getEncountersForPatient(id),
+        api.getPrescriptions(),
       ]);
-      setPatient(patientRes.data);
-      setEncounters(encountersRes.data);
-      setPrescriptions(prescriptionsRes.data);
+
+      const patientPayload = patientRes?.data?.data?.patient || patientRes?.data?.patient || patientRes?.data || null;
+      const encountersPayload = encountersRes?.data?.data?.encounters || encountersRes?.data?.encounters || encountersRes?.data || [];
+      const prescriptionsPayload = prescriptionsRes?.data?.data?.prescriptions || prescriptionsRes?.data?.prescriptions || prescriptionsRes?.data || [];
+
+      setPatient(patientPayload);
+      setEncounters(encountersPayload);
+      setPrescriptions(prescriptionsPayload);
     } catch (error) {
       toast.error('Failed to fetch patient data');
     } finally {

@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // Base URL from Vite environment OR default to localhost
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Backend mounts routes under /api/v1 — default to that to keep paths consistent
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 class APIClient {
   constructor() {
@@ -63,6 +64,15 @@ class APIClient {
     return this.client.get('/users');
   }
 
+  // Fetch users by roles, scoped server-side to the requesting user's hospital
+  // `roles` can be a comma-separated string or an array of role strings
+  getUsersByRoles(roles) {
+    let q = '';
+    if (Array.isArray(roles)) q = roles.join(',');
+    else q = roles || '';
+    return this.client.get(`/users/roles?roles=${encodeURIComponent(q)}`);
+  }
+
   getUserById(id) {
     return this.client.get(`/users/${id}`);
   }
@@ -95,6 +105,11 @@ class APIClient {
 
   createPatient(data) {
     return this.client.post('/patients', data);
+  }
+
+  // Suggest next MRN (hospital-scoped) without reserving the sequence
+  getSuggestMrn() {
+    return this.client.get('/patients/suggest-mrn');
   }
 
   updatePatient(id, data) {
@@ -154,6 +169,11 @@ class APIClient {
     return this.client.get('/encounters');
   }
 
+  // Get encounters for a specific patient (server-side filter)
+  getEncountersForPatient(patientId) {
+    return this.client.get(`/patients/${patientId}/encounters`);
+  }
+
   getEncounterById(id) {
     return this.client.get(`/encounters/${id}`);
   }
@@ -182,6 +202,11 @@ class APIClient {
 
   getPrescriptions() {
     return this.client.get('/prescriptions');
+  }
+
+  // Get prescriptions for a specific patient (patient-scoped)
+  getPrescriptionsForPatient(patientId) {
+    return this.client.get(`/prescriptions/patient/${patientId}`);
   }
 
   getPrescriptionById(id) {
@@ -359,6 +384,37 @@ class APIClient {
 
   getDashboardAlerts() {
     return this.client.get('/dashboard/alerts');
+  }
+
+  /* --------------------------------------------------------------------------
+   * CYBORG MICROSERVICE
+   * Backend mounted at /api/v1/cyborg (see backend routes)
+   * POST /cyborg/upsert-encounter
+   * POST /cyborg/search
+   * POST /cyborg/search-advanced
+   * GET  /cyborg/health
+   * -------------------------------------------------------------------------- */
+
+  cyborgUpsertEncounter(data) {
+    return this.client.post('/cyborg/upsert-encounter', data);
+  }
+
+  cyborgSearch(data) {
+    return this.client.post('/cyborg/search', data);
+  }
+
+  cyborgSearchAdvanced(data) {
+    return this.client.post('/cyborg/search-advanced', data);
+  }
+
+  cyborgHealth() {
+    return this.client.get('/cyborg/health');
+  }
+
+  // Local hospital-scoped search (used by layout quick search)
+  localSearch(query, limit = 20) {
+    const q = typeof query === 'string' ? query : '';
+    return this.client.get(`/search?query=${encodeURIComponent(q)}&limit=${limit}`);
   }
 }
 

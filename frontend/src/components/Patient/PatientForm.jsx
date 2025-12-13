@@ -24,6 +24,9 @@ export const PatientForm = () => {
   const { user } = useApp();
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(!!id);
+  const [startEncounter, setStartEncounter] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [suggestedMrn, setSuggestedMrn] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -31,10 +34,49 @@ export const PatientForm = () => {
     }
   }, [id]);
 
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    // If creating a new patient, fetch MRN suggestion
+    const fetchMrn = async () => {
+      if (!id) {
+        try {
+          const res = await api.getSuggestMrn();
+          const suggestion = res?.data?.data?.suggestion || res?.data?.suggestion || (res?.data && res.data.suggestion) || '';
+          setSuggestedMrn(suggestion);
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+    fetchMrn();
+  }, [id]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.getUsers();
+      const list = res?.data?.data?.users || res?.data?.users || res?.data || [];
+      setUsers(list);
+    } catch (err) {
+      setUsers([]);
+    }
+  };
+
   const fetchPatient = async () => {
     try {
       const response = await api.getPatientById(id);
-      setPatient(response.data);
+      // Normalize response shape: ApiResponse -> { data: { patient } }
+      const payload = response?.data?.data?.patient || response?.data?.patient || response?.data || null;
+      if (payload && payload.dob) {
+        // Ensure DOB is a yyyy-mm-dd string for date input
+        try {
+          const d = new Date(payload.dob);
+          if (!Number.isNaN(d.getTime())) payload.dob = d.toISOString().slice(0, 10);
+        } catch (e) {}
+      }
+      setPatient(payload);
     } catch (error) {
       toast.error('Failed to fetch patient');
     } finally {
@@ -43,7 +85,7 @@ export const PatientForm = () => {
   };
 
   const initialValues = patient || {
-    hospitalId: '',
+    hospitalId: suggestedMrn || '',
     firstName: '',
     lastName: '',
     dob: '',
@@ -56,19 +98,36 @@ export const PatientForm = () => {
     emergencyContacts: [{ name: '', relation: '', phone: '' }],
   };
 
-  const handleSubmit = async (values) => {
+  // Formik calls onSubmit with (values, formikHelpers)
+  const handleSubmit = async (values, { setSubmitting }) => {
     try {
       if (id) {
         await api.updatePatient(id, values);
         toast.success('Patient updated successfully');
       } else {
-        values.hospital = user?.hospital;
-        await api.createPatient(values);
+        const payload = { ...values, hospital: user?.hospital };
+        const res = await api.createPatient(payload);
+        const newPatientId = res?.data?.data?.patient?._id || res?.data?.patient?._id || res?.data?._id;
+
+        // Optionally start an encounter immediately
+        if (startEncounter && newPatientId) {
+          const encounterPayload = {
+            patient: newPatientId,
+            encounterType: values.encounterType || 'outpatient',
+            chiefComplaint: values.chiefComplaint || '',
+            seenBy: values.seenBy || user?._id,
+            hospital: user?.hospital,
+          };
+          await api.createEncounter(encounterPayload);
+        }
+
         toast.success('Patient created successfully');
       }
       navigate('/patients');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save patient');
+    } finally {
+      if (setSubmitting) setSubmitting(false);
     }
   };
 
@@ -94,6 +153,48 @@ export const PatientForm = () => {
         >
           {({ isSubmitting, values }) => (
             <Form className="space-y-6">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={startEncounter} onChange={(e) => setStartEncounter(e.target.checked)} className="w-4 h-4" />
+                  <span className="text-sm">Start an encounter for this patient after creation</span>
+                </label>
+              </div>
+
+              {startEncounter && (
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Initial Encounter</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Encounter Type</label>
+                      <Field as="select" name="encounterType" className="w-full px-3 py-2 border rounded">
+                        <option value="outpatient">Outpatient</option>
+                        <option value="inpatient">Inpatient</option>
+                        <option value="emergency">Emergency</option>
+                        <option value="teleconsult">Teleconsult</option>
+                      </Field>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Seen By</label>
+                      <Field as="select" name="seenBy" className="w-full px-3 py-2 border rounded">
+                        <option value="">Select provider</option>
+                        {users.length > 0 && users.map(u => (
+                          <option key={u._id} value={u._id}>{u.firstName} {u.lastName} ({u.role})</option>
+                        ))}
+                        {
+                          users.length === 0 && (<option value="" disabled>No users available</option>)
+                        }
+                      </Field>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Chief Complaint</label>
+                      <Field name="chiefComplaint" className="w-full px-3 py-2 border rounded" />
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">MRN (Medical Record Number)</label>

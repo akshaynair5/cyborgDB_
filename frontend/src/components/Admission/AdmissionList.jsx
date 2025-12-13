@@ -145,7 +145,7 @@ export const AdmissionList = () => {
                   <td className="px-6 py-4">
                     <div className="flex gap-3">
                       <button
-                        onClick={() => navigate(`/admissions/${a._id}`)}
+                        onClick={() => navigate(`/admissions/${a._id}/edit`)}
                         className="text-blue-600 hover:text-blue-800"
                       >
                         <Eye size={18} />

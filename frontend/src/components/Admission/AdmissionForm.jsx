@@ -21,6 +21,7 @@ export const AdmissionForm = () => {
   const { user } = useApp();
   const [patients, setPatients] = useState([]);
   const [users, setUsers] = useState([]);
+  const [encounters, setEncounters] = useState([]);
   const [admission, setAdmission] = useState(null);
   const [loading, setLoading] = useState(!!id);
 
@@ -47,6 +48,19 @@ export const AdmissionForm = () => {
     }
   };
 
+  const fetchEncounters = async (patientId) => {
+    if (!patientId) return setEncounters([]);
+    try {
+      const res = await api.getEncountersForPatient(patientId);
+      // API returns data.message.encounters or data.encounters depending on backend
+      const list = res?.data?.message?.encounters || res?.data?.encounters || res?.data || [];
+      setEncounters(list);
+    } catch (err) {
+      console.error(err);
+      setEncounters([]);
+    }
+  };
+
   const fetchAdmission = async () => {
     try {
       const response = await api.getAdmissionById(id);
@@ -59,6 +73,7 @@ export const AdmissionForm = () => {
   };
 
   const initialValues = admission || {
+    encounter: '',
     patient: '',
     admissionReason: '',
     ward: '',
@@ -108,19 +123,40 @@ export const AdmissionForm = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
-                  <Field
-                    as="select"
-                    name="patient"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select a patient</option>
-                    {patients.length > 0 &&patients.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        {p.firstName} {p.lastName} ({p.hospitalId})
+                  <Field name="patient">
+                    {({ field, form }) => (
+                      <select
+                        {...field}
+                        onChange={(e) => {
+                          form.setFieldValue('patient', e.target.value);
+                          // clear encounter when patient changes
+                          form.setFieldValue('encounter', '');
+                          fetchEncounters(e.target.value);
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select a patient</option>
+                        {patients.length > 0 && patients.map((p) => (
+                          <option key={p._id} value={p._id}>
+                            {p.firstName} {p.lastName} ({p.hospitalId})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Link to Encounter (optional)</label>
+                  <Field as="select" name="encounter" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">No encounter</option>
+                    {encounters.length > 0 && encounters.map((e) => (
+                      <option key={e._id} value={e._id}>
+                        {e.reason ? `${e.reason} — ` : ''}{e.startedAt ? new Date(e.startedAt).toLocaleString() : (e.createdAt ? new Date(e.createdAt).toLocaleString() : 'Encounter')}
                       </option>
                     ))}
                   </Field>
-                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
                 </div>
 
                 <div>

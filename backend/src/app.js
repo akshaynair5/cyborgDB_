@@ -31,6 +31,8 @@ import imagingRouter from "./routes/imaging.routes.js";
 import admissionRouter from "./routes/admission.routes.js";
 import auditRouter from "./routes/audit.routes.js";
 import dashboardRouter from "./routes/dashboard.routes.js";
+import cyborgRouter from "./routes/cyborg.routes.js";
+import searchRouter from "./routes/search.routes.js";
 import ApiError from './utils/ApiError.js';
 
 // ================================
@@ -47,6 +49,8 @@ app.use("/api/v1/imaging", imagingRouter);
 app.use("/api/v1/admissions", admissionRouter);
 app.use("/api/v1/audit", auditRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
+app.use("/api/v1/cyborg", cyborgRouter);
+app.use("/api/v1/search", searchRouter);
 
 // 404 handler
 app.use((req, res, next) => {

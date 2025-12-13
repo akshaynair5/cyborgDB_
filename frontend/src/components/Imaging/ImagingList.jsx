@@ -58,7 +58,7 @@ export const ImagingList = () => {
         <h1 className="text-3xl font-bold text-gray-800">Imaging Records</h1>
 
         <button
-          onClick={() => navigate('/imaging/new')}
+          onClick={() => navigate('/imaging-reports/new')}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
         >
           <Plus size={20} /> New Imaging Record
@@ -116,15 +116,15 @@ export const ImagingList = () => {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex gap-3">
                         <button
-                          onClick={() => navigate(`/imaging/${item._id}`)}
+                          onClick={() => navigate(`/imaging-reports/${item._id}/edit`)}
                           className="text-blue-600 hover:text-blue-800 transition"
-                          title="View"
+                          title="View / Edit"
                         >
                           <Eye size={18} />
                         </button>
 
                         <button
-                          onClick={() => navigate(`/imaging/${item._id}/edit`)}
+                          onClick={() => navigate(`/imaging-reports/${item._id}/edit`)}
                           className="text-green-600 hover:text-green-800 transition"
                           title="Edit"
                         >

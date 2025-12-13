@@ -116,9 +116,9 @@ export const LabResultList = () => {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex gap-3">
                         <button
-                          onClick={() => navigate(`/lab-results/${item._id}`)}
+                          onClick={() => navigate(`/lab-results/${item._id}/edit`)}
                           className="text-blue-600 hover:text-blue-800 transition"
-                          title="View"
+                          title="View / Edit"
                         >
                           <Eye size={18} />
                         </button>

@@ -20,8 +20,8 @@ export const PatientList = () => {
   useEffect(() => {
     const filtered = patients.filter(
       (p) =>
-        p.firstName.toLowerCase().includes(search.toLowerCase()) ||
-        p.lastName.toLowerCase().includes(search.toLowerCase()) ||
+        p.firstName?.toLowerCase().includes(search.toLowerCase()) ||
+        p.lastName?.toLowerCase().includes(search.toLowerCase()) ||
         p.hospitalId.includes(search)
     );
     setFiltered(filtered);
