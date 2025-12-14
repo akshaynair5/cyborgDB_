@@ -2,7 +2,7 @@ import ApiError from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-const MICROSERVICE_URL = process.env.CYBORG_MICROSERVICE_URL || "http://localhost:7000";
+const MICROSERVICE_URL = process.env.CYBORG_MICROSERVICE_URL || "http://127.0.0.1:7000";
 
 const doFetch = async (path, options = {}) => {
   const url = `${MICROSERVICE_URL}${path}`;

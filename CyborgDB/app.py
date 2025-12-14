@@ -27,10 +27,48 @@ from typing import Dict, Any, List, Optional
 import math
 from datetime import datetime, timedelta
 import uuid
+import time
+from google import genai
+
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+gemini_client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
 
 # ==================================================
 # HELPER FUNCTIONS d
 # ==================================================
+def call_gemini_llm(
+    prompt: str,
+    temperature: float = 0.2,
+    max_output_tokens: int = 1024,
+    expect_json: bool = False
+) -> str | Dict[str, Any]:
+    """
+    Calls Gemini API safely and optionally enforces JSON output.
+    """
+    try:
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "temperature": temperature,
+                "max_output_tokens": max_output_tokens,
+                "response_mime_type": "application/json" if expect_json else "text/plain"
+            }
+        )
+
+        text = response.text.strip()
+
+        if expect_json:
+            return json.loads(text)
+
+        return text
+
+    except Exception as e:
+        logger.exception("Gemini LLM call failed")
+        raise RuntimeError(f"LLM error: {str(e)}")
 
 def parse_possible_date(encounter: Dict[str, Any]) -> Optional[datetime]:
     """
@@ -392,37 +430,26 @@ logger = logging.getLogger("clinical-search")
 # ==================================================
 
 def generate_clinical_summary(encounter: Dict[str, Any]) -> str:
-    """
-    Converts structured encounter JSON into a single anonymized
-    clinical narrative for embedding.
-    """
-
     prompt = f"""
-    Convert the following medical encounter into ONE anonymized
-    clinical summary paragraph.
+Convert the following medical encounter into ONE anonymized
+clinical summary paragraph.
 
-    Rules:
-    - No patient identifiers
-    - No hospital identifiers
+Rules:
+- No patient identifiers
+- No hospital identifiers
+- Focus on symptoms, exam findings, labs, imaging, diagnosis,
+  treatment, and outcome
+- Use formal medical language
 
-
-    - Focus on symptoms, exam findings, labs, imaging, diagnosis,
-      treatment, and outcome
-    - Use formal medical language
-
-    DATA:
-    {json.dumps(encounter, indent=2)}
-    """
-
-    # ---- REPLACE WITH REAL LLM CALL ----
-
-
-    return (
-        "Patient presented with febrile illness and thrombocytopenia, "
-        "associated with abdominal pain. Initial antibiotic therapy "
-        "showed poor response. Subsequent investigations suggested a "
-        "viral etiology. Supportive care led to clinical improvement."
+DATA:
+{json.dumps(encounter, indent=2)}
+"""
+    return call_gemini_llm(
+        prompt,
+        temperature=0.1,
+        max_output_tokens=512
     )
+
 
 
 def embed_text(text: str) -> List[float]:
@@ -441,69 +468,35 @@ def synthesize_clinical_answer(
     query: str,
     encounters: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    """
-    Uses an LLM to synthesize multiple similar encounters into
-    a single clinician-facing response.
-    """
 
     prompt = f"""
-    A doctor asked the following clinical question:
+A doctor asked the following clinical question:
 
-    "{query}"
+"{query}"
 
-    Below are anonymized clinical encounters with similar presentations.
+Below are anonymized clinical encounters with similar presentations.
 
+Analyze them and return a structured medical response with:
 
-    Analyze them and return a structured medical response with:
+1. Key shared clinical patterns
+2. Diagnoses that were ultimately identified
+3. Treatment outcomes
+4. Practical next steps for management
 
-    1. Key shared clinical patterns
-    2. Diagnoses that were ultimately identified
-    3. Treatment outcomes
-    4. Practical next steps for management
+Encounters:
+{json.dumps(encounters, indent=2)}
 
-    Encounters:
-    {json.dumps(encounters, indent=2)}
+Respond ONLY in valid JSON with keys:
+summary, clinical_insights, management_outcomes,
+suggested_next_steps, similar_cases
+"""
 
-    Respond ONLY in structured JSON with these keys:
-    summary, clinical_insights, management_outcomes,
-    suggested_next_steps, similar_cases
-    """
-
-    # ---- REPLACE WITH REAL LLM CALL ----
-    return {
-        "summary": {
-            "confidence": "high",
-            "matches_found": len(encounters),
-            "key_patterns": [
-                "Persistent fever with thrombocytopenia",
-                "Poor response to empirical antibiotics"
-
-
-            ]
-        },
-        "clinical_insights": [
-            "Several cases were later diagnosed as viral febrile illness",
-            "Delayed recognition increased complication risk"
-        ],
-        "management_outcomes": [
-            "Supportive care resulted in recovery in most cases",
-            "Platelet monitoring was critical in severe cases"
-        ],
-        "suggested_next_steps": [
-            "Evaluate for viral causes such as dengue or malaria",
-            "Monitor platelet trends closely",
-            "Reassess antibiotic necessity"
-        ],
-        "similar_cases": [
-            {
-                "encounter_id": e["encounter_id"],
-                "similarity": e["score"],
-                "key_diagnosis": "Viral febrile illness",
-                "outcome": "Recovered"
-            }
-            for e in encounters
-        ]
-    }
+    return call_gemini_llm(
+        prompt,
+        temperature=0.2,
+        max_output_tokens=1500,
+        expect_json=True
+    )
 
 
 # -------------------------------
