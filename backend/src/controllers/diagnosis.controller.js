@@ -8,7 +8,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const createDiagnosis = asyncHandler(async (req, res) => {
 const data = req.body;
 data.hospital = req.user.hospital;
-data.doctor = req.user._id;
+data.recordedBy = req.user._id;
 
 
 const patient = await Patient.findById(data.patient);
@@ -17,8 +17,12 @@ if (!patient) throw new ApiError(404, "Patient not found");
 
 const diagnosis = await Diagnosis.create(data);
 
+const populated = await Diagnosis.findById(diagnosis._id)
+    .populate('patient', 'firstName lastName hospitalId')
+    .populate('recordedBy', 'firstName lastName')
+    .lean();
 
-return res.status(201).json(new ApiResponse(201, { diagnosis }));
+return res.status(201).json(new ApiResponse(201, { diagnosis: populated }));
 });
 
 
@@ -34,6 +38,15 @@ if (!diagnosis) throw new ApiError(404, "Diagnosis not found");
 
 
 return res.status(200).json(new ApiResponse(200, { diagnosis }));
+});
+
+
+export const getDiagnosesForEncounter = asyncHandler(async (req, res) => {
+const encounterId = req.params.encounterId;
+const diagnoses = await Diagnosis.find({ hospital: req.user.hospital, encounter: encounterId })
+    .populate('recordedBy', 'firstName lastName')
+    .sort({ recordedAt: -1 });
+return res.status(200).json(new ApiResponse(200, { diagnoses }));
 });
 
 

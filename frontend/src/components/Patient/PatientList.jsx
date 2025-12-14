@@ -7,7 +7,7 @@ import { useApp } from '../../context/AppContext';
 
 export const PatientList = () => {
   const navigate = useNavigate();
-  const { user } = useApp();
+  const { user, setCurrentPatient } = useApp();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -108,14 +108,20 @@ export const PatientList = () => {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex gap-3">
                         <button
-                          onClick={() => navigate(`/patients/${patient._id}`)}
+                          onClick={() => {
+                            setCurrentPatient(patient);
+                            navigate(`/patients/${patient._id}`, { state: { patient } });
+                          }}
                           className="text-blue-600 hover:text-blue-800 transition"
                           title="View"
                         >
                           <Eye size={18} />
                         </button>
                         <button
-                          onClick={() => navigate(`/patients/${patient._id}/edit`)}
+                          onClick={() => {
+                            setCurrentPatient(patient);
+                            navigate(`/patients/${patient._id}/edit`, { state: { patient } });
+                          }}
                           className="text-green-600 hover:text-green-800 transition"
                           title="Edit"
                         >

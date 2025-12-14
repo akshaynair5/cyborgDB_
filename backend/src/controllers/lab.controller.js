@@ -37,6 +37,15 @@ return res.status(200).json(new ApiResponse(200, { lab }));
 });
 
 
+export const getLabResultsForEncounter = asyncHandler(async (req, res) => {
+const encounterId = req.params.encounterId;
+const labs = await LabResult.find({ hospital: req.user.hospital, encounter: encounterId })
+    .populate('orderedBy', 'firstName lastName')
+    .sort({ createdAt: -1 });
+return res.status(200).json(new ApiResponse(200, { labs }));
+});
+
+
 export const updateLabResult = asyncHandler(async (req, res) => {
 const updates = req.body;
 const lab = await LabResult.findByIdAndUpdate(req.params.id, updates, { new: true });

@@ -10,17 +10,22 @@ export const createPrescription = asyncHandler(async (req, res) => {
     data.hospital = req.user.hospital;
     data.prescribedBy = req.user._id;
 
-
     const patient = await Patient.findById(data.patient);
     if (!patient) throw new ApiError(404, "Patient not found");
 
-
     const prescription = await Prescription.create(data);
 
+    if (data.encounter) {
+        await Encounter.findByIdAndUpdate(
+            data.encounter,
+            { $addToSet: { prescriptions: prescription._id } }
+        );
+    }
 
-    return res.status(201).json(new ApiResponse(201, { prescription }));
+    return res.status(201).json(
+        new ApiResponse(201, { prescription })
+    );
 });
-
 
 export const getPrescriptions = asyncHandler(async (req, res) => {
     const prescriptions = await Prescription.find({ hospital: req.user.hospital });
@@ -31,6 +36,17 @@ export const getPrescriptions = asyncHandler(async (req, res) => {
 export const getPrescriptionsForPatient = asyncHandler(async (req, res) => {
     const patientId = req.params.id;
     const prescriptions = await Prescription.find({ hospital: req.user.hospital, patient: patientId }).sort({ createdAt: -1 });
+    return res.status(200).json(new ApiResponse(200, { prescriptions }));
+});
+
+
+export const getPrescriptionsForEncounter = asyncHandler(async (req, res) => {
+    const encounterId = req.params.encounterId;
+    console.log("Fetching prescriptions for encounter:", encounterId);
+    const prescriptions = await Prescription.find({ hospital: req.user.hospital, encounter: encounterId })
+        .populate('prescribedBy', 'firstName lastName')
+        .populate('items')
+        .sort({ createdAt: -1 });
     return res.status(200).json(new ApiResponse(200, { prescriptions }));
 });
 

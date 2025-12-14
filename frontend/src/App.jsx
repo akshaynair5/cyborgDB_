@@ -24,6 +24,7 @@ const AdmissionForm = lazy(() => import('./components/Admission/AdmissionForm').
 // Encounters
 const EncounterForm = lazy(() => import('./components/Encounter/EncounterForm').then(m => ({ default: m.EncounterForm })));
 const EncounterList = lazy(() => import('./components/Encounter/EncounterList').then(m => ({ default: m.EncounterList })));
+const EncounterDetail = lazy(() => import('./components/Encounter/EncounterDetail').then(m => ({ default: m.EncounterDetail })));
 // Cyborg Search
 const CyborgSearch = lazy(() => import('./pages/CyborgSearch').then(m => ({ default: m.CyborgSearch })));
 const LocalSearch = lazy(() => import('./pages/LocalSearch').then(m => ({ default: m.LocalSearch })));
@@ -164,6 +165,7 @@ const routeConfig = [
   // Encounters
   { path: '/encounters', element: <EncounterList />, roles: [] },
   { path: '/encounters/new', element: <EncounterForm />, roles: ['admin', 'doctor'] },
+  { path: '/encounters/:id', element: <EncounterDetail />, roles: [] },
   { path: '/encounters/:id/edit', element: <EncounterForm />, roles: ['admin', 'doctor'] },
 
   // Cyborg natural language search

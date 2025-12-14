@@ -36,6 +36,13 @@ export const getImagingReportById = asyncHandler(async (req, res) => {
 });
 
 
+export const getImagingReportsForEncounter = asyncHandler(async (req, res) => {
+    const encounterId = req.params.encounterId;
+    const imaging = await ImagingReport.find({ hospital: req.user.hospital, encounter: encounterId }).sort({ createdAt: -1 });
+    return res.status(200).json(new ApiResponse(200, { imaging }));
+});
+
+
 export const updateImagingReport = asyncHandler(async (req, res) => {
     const updates = req.body;
     const imaging = await ImagingReport.findByIdAndUpdate(req.params.id, updates, { new: true });

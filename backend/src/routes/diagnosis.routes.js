@@ -5,7 +5,8 @@ createDiagnosis,
 getDiagnoses,
 getDiagnosisById,
 updateDiagnosis,
-deleteDiagnosis
+deleteDiagnosis,
+getDiagnosesForEncounter
 } from '../controllers/diagnosis.controller.js';
 
 
@@ -16,6 +17,8 @@ diagnosisRouter.route('/')
 .post(verifyJWT, createDiagnosis)
 .get(verifyJWT, getDiagnoses);
 
+// encounter-scoped list must come before the '/:id' wildcard
+diagnosisRouter.get('/encounter/:encounterId', verifyJWT, getDiagnosesForEncounter);
 
 diagnosisRouter.route('/:id')
 .get(verifyJWT, getDiagnosisById)

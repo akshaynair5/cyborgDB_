@@ -5,7 +5,8 @@ import {
     getImagingReports,
     getImagingReportById,
     updateImagingReport,
-    deleteImagingReport
+    deleteImagingReport,
+    getImagingReportsForEncounter
 } from '../controllers/imaging.controller.js';
 
 
@@ -16,6 +17,8 @@ imagingRouter.route('/')
     .post(verifyJWT, createImagingReport)
     .get(verifyJWT, getImagingReports);
 
+// encounter-scoped list must come before the '/:id' wildcard
+imagingRouter.get('/encounter/:encounterId', verifyJWT, getImagingReportsForEncounter);
 
 imagingRouter.route('/:id')
     .get(verifyJWT, getImagingReportById)

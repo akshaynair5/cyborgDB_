@@ -7,7 +7,7 @@ import { useApp } from '../../context/AppContext';
 
 export const EncounterList = () => {
   const navigate = useNavigate();
-  const { user } = useApp();
+  const { user, setCurrentEncounter } = useApp();
 
   const [encounters, setEncounters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -93,8 +93,14 @@ export const EncounterList = () => {
                     <td className="px-6 py-4">{e.startedAt ? new Date(e.startedAt).toLocaleString() : '-'}</td>
                     <td className="px-6 py-4">
                       <div className="flex gap-3">
-                        <button onClick={() => navigate(`/encounters/${e._id}/edit`)} className="text-blue-600 hover:text-blue-800"><Eye size={18} /></button>
-                        <button onClick={() => navigate(`/encounters/${e._id}/edit`)} className="text-green-600 hover:text-green-800"><Edit size={18} /></button>
+                        <button onClick={() => {
+                          setCurrentEncounter(e);
+                          navigate(`/encounters/${e._id}`, { state: { encounter: e } });
+                        }} className="text-blue-600 hover:text-blue-800"><Eye size={18} /></button>
+                        <button onClick={() => {
+                          setCurrentEncounter(e);
+                          navigate(`/encounters/${e._id}/edit`, { state: { encounter: e } });
+                        }} className="text-green-600 hover:text-green-800"><Edit size={18} /></button>
                         <button onClick={() => handleDelete(e._id)} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>
                       </div>
                     </td>

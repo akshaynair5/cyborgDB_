@@ -6,6 +6,8 @@ export const AppProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [hospital, setHospital] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPatient, setCurrentPatient] = useState(null);
+  const [currentEncounter, setCurrentEncounter] = useState(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -32,7 +34,7 @@ export const AppProvider = ({ children }) => {
   };
 
   return (
-    <AppContext.Provider value={{ user, hospital, isLoading, login, logout, setHospital }}>
+    <AppContext.Provider value={{ user, hospital, isLoading, login, logout, setHospital, currentPatient, setCurrentPatient, currentEncounter, setCurrentEncounter }}>
       {children}
     </AppContext.Provider>
   );

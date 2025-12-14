@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Edit, Pill, TrendingUp, Activity } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 export const PatientDetail = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
-  const [patient, setPatient] = useState(null);
+  const { currentPatient, setCurrentPatient } = useApp();
+  const [patient, setPatient] = useState(currentPatient || location.state?.patient || null);
   const [encounters, setEncounters] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!patient);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -18,11 +21,34 @@ export const PatientDetail = () => {
   }, [id]);
 
   const fetchPatientData = async () => {
+    // If we already have patient data from navigation, just fetch related data
+    if (patient) {
+      try {
+        const [encountersRes, prescriptionsRes] = await Promise.all([
+          api.getEncountersForPatient(id),
+          api.getPrescriptionsForPatient(id),
+        ]);
+
+        const encountersPayload = encountersRes?.data?.data?.encounters || encountersRes?.data?.encounters || encountersRes?.data || [];
+        const prescriptionsPayload = prescriptionsRes?.data?.data?.prescriptions || prescriptionsRes?.data?.prescriptions || prescriptionsRes?.data || [];
+
+        setEncounters(encountersPayload);
+        setPrescriptions(prescriptionsPayload);
+      } catch (error) {
+        console.error('Failed to fetch related data:', error);
+        toast.error('Failed to fetch patient encounters/prescriptions');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Otherwise, fetch full patient data from API
     try {
       const [patientRes, encountersRes, prescriptionsRes] = await Promise.all([
         api.getPatientById(id),
         api.getEncountersForPatient(id),
-        api.getPrescriptions(),
+        api.getPrescriptionsForPatient(id),
       ]);
 
       const patientPayload = patientRes?.data?.data?.patient || patientRes?.data?.patient || patientRes?.data || null;
@@ -30,9 +56,11 @@ export const PatientDetail = () => {
       const prescriptionsPayload = prescriptionsRes?.data?.data?.prescriptions || prescriptionsRes?.data?.prescriptions || prescriptionsRes?.data || [];
 
       setPatient(patientPayload);
+      setCurrentPatient(patientPayload);
       setEncounters(encountersPayload);
       setPrescriptions(prescriptionsPayload);
     } catch (error) {
+      console.error('Failed to fetch patient data:', error);
       toast.error('Failed to fetch patient data');
     } finally {
       setLoading(false);

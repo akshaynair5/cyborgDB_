@@ -5,6 +5,7 @@ createEncounter,
 getEncounters,
 getEncounterById,
 updateEncounter,
+endEncounter,
 deleteEncounter
 } from '../controllers/encounter.controller.js';
 
@@ -21,6 +22,9 @@ encounterRouter.route('/:id')
 .get(verifyJWT, getEncounterById)
 .patch(verifyJWT, updateEncounter)
 .delete(verifyJWT, deleteEncounter);
+
+// POST /encounters/:id/end - mark encounter as ended and send to Cyborg
+encounterRouter.post('/:id/end', verifyJWT, endEncounter);
 
 
 export default encounterRouter;

@@ -54,7 +54,6 @@ export const EncounterForm = () => {
   const fetchEncounter = async () => {
     try {
       const response = await api.getEncounterById(id);
-      // ApiResponse shape: { success, message, data }
       const payload = response?.data?.data?.encounter || response?.data?.encounter || response?.data || response;
       setEncounter(payload);
     } catch (error) {
@@ -89,142 +88,220 @@ export const EncounterForm = () => {
     notes: '',
   };
 
-  const handleSubmit = async (values) => {
-    try {
-      values.hospital = user?.hospital;
-
-      // Ensure patient is set (validation above should enforce this)
-      if (!values.patient) {
-        toast.error('Please select or create a patient first');
-        return;
-      }
-
-      // 1) Create diagnoses first so we can attach their ids to the encounter
-      const diagItems = values.diagnoses || [];
-      const createdDiagnosisIds = [];
-      for (const d of diagItems) {
-        if (!d || !d.description) continue;
-        try {
-          const diagPayload = {
-            patient: values.patient,
-            code: d.code,
-            description: d.description,
-            isPrimary: !!d.isPrimary,
-            hospital: user?.hospital,
-          };
-          const diagRes = await api.createDiagnosis(diagPayload);
-          const diagId = diagRes?.data?.data?.diagnosis?._id || diagRes?.data?.diagnosis?._id || diagRes?.data?._id;
-          if (diagId) createdDiagnosisIds.push(diagId);
-        } catch (err) {
-          // continue on errors for individual diagnosis creation
-          console.warn('Diagnosis create failed', err?.response?.data || err.message);
-        }
-      }
-
-      // Separate child resources (prescriptions, labs, imaging, admission) from encounter payload
-      const childPrescriptions = values.prescriptions || [];
-      const childLabs = values.labs || [];
-      const childImaging = values.imaging || [];
-      const admissionPayload = values.admission;
-
-      // Build encounter payload without child arrays, but include created diagnosis ids
-      const encounterPayload = { ...values };
-      delete encounterPayload.prescriptions;
-      delete encounterPayload.labs;
-      delete encounterPayload.imaging;
-      delete encounterPayload.admission;
-      delete encounterPayload.diagnoses;
-      if (createdDiagnosisIds.length) encounterPayload.diagnoses = createdDiagnosisIds;
-
-      let encounterId = id;
-      if (id) {
-        const res = await api.updateEncounter(id, encounterPayload);
-        encounterId = res?.data?.data?.encounter?._id || id;
-      } else {
-        const res = await api.createEncounter(encounterPayload);
-        encounterId = res?.data?.data?.encounter?._id || res?.data?.encounter?._id || res?.data?._id;
-      }
-
-      // Create prescriptions and attach
-      const createdPrescriptionIds = [];
-      for (const p of childPrescriptions) {
-        if (!p || !p.name) continue;
-        const presPayload = {
-          patient: values.patient,
-          encounter: encounterId,
-          hospital: user?.hospital,
-          prescribedBy: user?._id,
-          items: [{
-            name: p.name,
-            dosage: p.dosage,
-            frequency: p.frequency,
-            durationDays: p.durationDays,
-            instructions: p.instructions,
-            quantity: p.quantity,
-          }]
-        };
-        const presRes = await api.createPrescription(presPayload);
-        const presId = presRes?.data?.data?.prescription?._id || presRes?.data?.prescription?._id || presRes?.data?._id;
-        if (presId) createdPrescriptionIds.push(presId);
-      }
-
-      // Create labs and attach
-      const createdLabIds = [];
-      for (const l of childLabs) {
-        if (!l || !l.testName) continue;
-        const labPayload = {
-          patient: values.patient,
-          encounter: encounterId,
-          hospital: user?.hospital,
-          orderedBy: user?._id,
-          tests: [{ testName: l.testName, value: l.value, units: l.units, referenceRange: l.referenceRange, flagged: l.flagged }]
-        };
-        const labRes = await api.createLabResult(labPayload);
-        const labId = labRes?.data?.data?.labResult?._id || labRes?.data?.labResult?._id || labRes?.data?._id;
-        if (labId) createdLabIds.push(labId);
-      }
-
-      // Create imaging reports and attach
-      const createdImagingIds = [];
-      for (const img of childImaging) {
-        if (!img || !img.modality) continue;
-        const imgPayload = {
-          ...img,
-          patient: values.patient,
-          encounter: encounterId,
-          hospital: user?.hospital,
-        };
-        const imgRes = await api.createImagingReport(imgPayload);
-        const imgId = imgRes?.data?.data?.imagingReport?._id || imgRes?.data?.imagingReport?._id || imgRes?.data?._id;
-        if (imgId) createdImagingIds.push(imgId);
-      }
-
-      // If admission requested, create admission linked to encounter
-      if (admissionPayload && admissionPayload.ward) {
-        const admissionCreate = {
-          ...admissionPayload,
-          patient: values.patient,
-          encounter: encounterId,
-          hospital: user?.hospital,
-        };
-        await api.createAdmission(admissionCreate);
-      }
-
-      // Attach child ids to encounter if any were created
-      const attachUpdates = {};
-      if (createdPrescriptionIds.length) attachUpdates.prescriptions = createdPrescriptionIds;
-      if (createdLabIds.length) attachUpdates.labs = createdLabIds;
-      if (createdImagingIds.length) attachUpdates.imaging = createdImagingIds;
-      if (Object.keys(attachUpdates).length) {
-        await api.updateEncounter(encounterId, attachUpdates);
-      }
-
-      toast.success('Encounter saved successfully');
-      navigate('/encounters');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to save encounter');
+const handleSubmit = async (values) => {
+  try {
+    if (!values.patient) {
+      toast.error('Please select or create a patient first');
+      return;
     }
-  };
+
+    const hospital = user?.hospital;
+
+    /* --------------------------------------------------
+       STEP 1: CREATE CHILD RESOURCES FIRST
+    -------------------------------------------------- */
+
+    const diagnosisIds = [];
+    const prescriptionIds = [];
+    const labIds = [];
+    const imagingIds = [];
+
+    /* ---------- DIAGNOSES ---------- */
+    for (const d of values.diagnoses || []) {
+      if (!d?.description) continue;
+
+      const payload = {
+        patient: values.patient,
+        hospital,
+        code: d.code || '',
+        description: d.description,
+        isPrimary: !!d.isPrimary,
+        recordedBy: user?._id,
+      };
+
+      const res = await api.createDiagnosis(payload);
+      console.log('Diagnosis response:', res?.data);
+
+      const diagId =
+        res?.data?.data?.diagnosis?._id ||
+        res?.data?.diagnosis?._id ||
+        res?.data?.message?.diagnosis?._id ||
+        res?.data?._id;
+
+      if (diagId) {
+        diagnosisIds.push(diagId);
+      } else {
+        console.warn('Diagnosis ID NOT FOUND', res?.data);
+      }
+    }
+
+    /* ---------- PRESCRIPTIONS ---------- */
+    for (const p of values.prescriptions || []) {
+      if (!p?.name) continue;
+
+      const payload = {
+        patient: values.patient,
+        hospital,
+        prescribedBy: user?._id,
+        items: [{
+          name: p.name,
+          dosage: p.dosage || '',
+          frequency: p.frequency || '',
+          durationDays: p.durationDays || 0,
+          instructions: p.instructions || '',
+          quantity: p.quantity || 1,
+        }],
+        notes: p.notes || '',
+      };
+
+      const res = await api.createPrescription(payload);
+      console.log('Prescription response:', res?.data);
+
+      const presId =
+        res?.data?.data?.prescription?._id ||
+        res?.data?.prescription?._id ||
+        res?.data?.message?.prescription?._id ||
+        res?.data?._id;
+
+      if (presId) {
+        prescriptionIds.push(presId);
+      } else {
+        console.warn('Prescription ID NOT FOUND', res?.data);
+      }
+    }
+
+    /* ---------- LAB RESULTS ---------- */
+    for (const l of values.labs || []) {
+      if (!l?.testName) continue;
+
+      const payload = {
+        patient: values.patient,
+        hospital,
+        orderedBy: user?._id,
+        status: l.status || 'ordered',
+        collectedAt: l.collectedAt ? new Date(l.collectedAt) : undefined,
+        reportedAt: l.reportedAt ? new Date(l.reportedAt) : undefined,
+        tests: [{
+          testName: l.testName,
+          value: l.value || '',
+          units: l.units || '',
+          referenceRange: l.referenceRange || '',
+          flagged: !!l.flagged,
+        }],
+      };
+
+      const res = await api.createLabResult(payload);
+      console.log('Lab response:', res?.data);
+
+      const labId =
+        res?.data?.data?.labResult?._id ||
+        res?.data?.labResult?._id ||
+        res?.data?.message?.labResult?._id ||
+        res?.data?._id;
+
+      if (labId) {
+        labIds.push(labId);
+      } else {
+        console.warn('Lab ID NOT FOUND', res?.data);
+      }
+    }
+
+    /* ---------- IMAGING ---------- */
+    for (const img of values.imaging || []) {
+      if (!img?.modality) continue;
+
+      const payload = {
+        patient: values.patient,
+        hospital,
+        modality: img.modality,
+        studyName: img.studyName,
+        report: img.report || '',
+        performedAt: img.performedAt ? new Date(img.performedAt) : undefined,
+        reportedAt: img.reportedAt ? new Date(img.reportedAt) : undefined,
+      };
+
+      const res = await api.createImagingReport(payload);
+      console.log('Imaging response:', res?.data);
+
+      const imgId =
+        res?.data?.data?.imagingReport?._id ||
+        res?.data?.imagingReport?._id ||
+        res?.data?.message?.imagingReport?._id ||
+        res?.data?._id;
+
+      if (imgId) {
+        imagingIds.push(imgId);
+      } else {
+        console.warn('Imaging ID NOT FOUND', res?.data);
+      }
+    }
+
+    console.log('Collected IDs:', {
+      diagnosisIds,
+      prescriptionIds,
+      labIds,
+      imagingIds,
+    });
+
+    /* --------------------------------------------------
+       STEP 2: CREATE / UPDATE ENCOUNTER WITH IDS
+    -------------------------------------------------- */
+
+    const encounterPayload = {
+      patient: values.patient,
+      hospital,
+      encounterType: values.encounterType,
+      seenBy: values.seenBy,
+      chiefComplaint: values.chiefComplaint,
+      historyOfPresentIllness: values.historyOfPresentIllness,
+      examination: values.examination,
+      vitals: values.vitals,
+      notes: values.notes,
+      startedAt: values.startedAt,
+
+      diagnoses: diagnosisIds,
+      prescriptions: prescriptionIds,
+      labs: labIds,
+      imaging: imagingIds,
+    };
+
+    let encounterId = id;
+
+    if (id) {
+      const res = await api.updateEncounter(id, encounterPayload);
+      console.log('Encounter update response:', res?.data);
+      toast.success('Encounter updated');
+    } else {
+      const res = await api.createEncounter(encounterPayload);
+      console.log('Encounter create response:', res?.data);
+
+      encounterId =
+        res?.data?.data?.encounter?._id ||
+        res?.data?.encounter?._id ||
+        res?.data?._id;
+
+      toast.success('Encounter created');
+    }
+
+    /* ---------- Admission ---------- */
+    if (values.admission?.ward) {
+      const res = await api.createAdmission({
+        ...values.admission,
+        patient: values.patient,
+        encounter: encounterId,
+        hospital,
+      });
+      console.log('Admission response:', res?.data);
+    }
+
+    toast.success('Encounter saved successfully');
+    navigate('/encounters');
+
+  } catch (error) {
+    console.error('Encounter save error:', error);
+    toast.error(error.response?.data?.message || 'Failed to save encounter');
+  }
+};
 
   if (loading) return <div className="text-center py-10">Loading...</div>;
 
@@ -575,101 +652,309 @@ export const EncounterForm = () => {
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Prescriptions</h3>
                 <FieldArray name="prescriptions">
                   {({ push, remove, form }) => (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {(form.values.prescriptions || []).map((pres, idx) => (
-                        <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                          <div>
-                            <label className="block text-sm text-gray-600">Name</label>
-                            <Field name={`prescriptions.${idx}.name`} className="w-full px-3 py-2 border rounded" />
+                        <div key={idx} className="border p-4 rounded-lg bg-gray-50">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Medicine Name *</label>
+                              <Field 
+                                name={`prescriptions.${idx}.name`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., Amoxicillin"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Dosage</label>
+                              <Field 
+                                name={`prescriptions.${idx}.dosage`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., 500mg"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Frequency</label>
+                              <Field 
+                                name={`prescriptions.${idx}.frequency`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., Twice daily"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-sm text-gray-600">Dosage</label>
-                            <Field name={`prescriptions.${idx}.dosage`} className="w-full px-3 py-2 border rounded" />
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Duration (days)</label>
+                              <Field 
+                                type="number"
+                                name={`prescriptions.${idx}.durationDays`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., 7"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Quantity</label>
+                              <Field 
+                                type="number"
+                                name={`prescriptions.${idx}.quantity`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., 14"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-sm text-gray-600">Frequency</label>
-                            <Field name={`prescriptions.${idx}.frequency`} className="w-full px-3 py-2 border rounded" />
+
+                          <div className="mb-3">
+                            <label className="block text-sm text-gray-600">Instructions</label>
+                            <Field 
+                              as="textarea"
+                              name={`prescriptions.${idx}.instructions`} 
+                              rows={2}
+                              className="w-full px-3 py-2 border rounded" 
+                              placeholder="e.g., Take after meals"
+                            />
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => remove(idx)} className="text-red-500">Remove</button>
+
+                          <div className="mb-3">
+                            <label className="block text-sm text-gray-600">Notes (Optional)</label>
+                            <Field 
+                              as="textarea"
+                              name={`prescriptions.${idx}.notes`} 
+                              rows={2}
+                              className="w-full px-3 py-2 border rounded" 
+                              placeholder="Additional notes about the prescription"
+                            />
                           </div>
+
+                          <button 
+                            type="button" 
+                            onClick={() => remove(idx)} 
+                            className="text-red-500 hover:text-red-700 text-sm"
+                          >
+                            Remove Prescription
+                          </button>
                         </div>
                       ))}
 
-                      <div>
-                        <button type="button" onClick={() => push({ name: '', dosage: '', frequency: '', durationDays: 0, quantity: 1 })} className="text-sm text-blue-600">+ Add prescription</button>
-                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => push({ 
+                          name: '', 
+                          dosage: '', 
+                          frequency: '', 
+                          durationDays: 0, 
+                          quantity: 1,
+                          instructions: '',
+                          notes: ''
+                        })} 
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        + Add prescription
+                      </button>
                     </div>
                   )}
                 </FieldArray>
               </div>
 
-              {/* Labs */}
               <div className="border-t pt-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Lab Tests</h3>
                 <FieldArray name="labs">
                   {({ push, remove, form }) => (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {(form.values.labs || []).map((lab, idx) => (
-                        <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                          <div>
-                            <label className="block text-sm text-gray-600">Test</label>
-                            <Field name={`labs.${idx}.testName`} className="w-full px-3 py-2 border rounded" />
+                        <div key={idx} className="border p-4 rounded-lg bg-gray-50">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Test Name *</label>
+                              <Field 
+                                name={`labs.${idx}.testName`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., CBC, HbA1c"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Value</label>
+                              <Field 
+                                name={`labs.${idx}.value`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., 7.2"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Units</label>
+                              <Field 
+                                name={`labs.${idx}.units`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., mg/dL, %"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-sm text-gray-600">Value</label>
-                            <Field name={`labs.${idx}.value`} className="w-full px-3 py-2 border rounded" />
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Reference Range</label>
+                              <Field 
+                                name={`labs.${idx}.referenceRange`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., 4.0-6.0"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Status</label>
+                              <Field 
+                                as="select" 
+                                name={`labs.${idx}.status`} 
+                                className="w-full px-3 py-2 border rounded"
+                              >
+                                <option value="ordered">Ordered</option>
+                                <option value="collected">Collected</option>
+                                <option value="reported">Reported</option>
+                                <option value="cancelled">Cancelled</option>
+                              </Field>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-2">
+                                <Field type="checkbox" name={`labs.${idx}.flagged`} />
+                                <span className="text-sm">Flagged/Abnormal</span>
+                              </label>
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-sm text-gray-600">Units</label>
-                            <Field name={`labs.${idx}.units`} className="w-full px-3 py-2 border rounded" />
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Collected At</label>
+                              <Field 
+                                type="datetime-local" 
+                                name={`labs.${idx}.collectedAt`} 
+                                className="w-full px-3 py-2 border rounded" 
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Reported At</label>
+                              <Field 
+                                type="datetime-local" 
+                                name={`labs.${idx}.reportedAt`} 
+                                className="w-full px-3 py-2 border rounded" 
+                              />
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => remove(idx)} className="text-red-500">Remove</button>
-                          </div>
+
+                          <button 
+                            type="button" 
+                            onClick={() => remove(idx)} 
+                            className="mt-3 text-red-500 hover:text-red-700 text-sm"
+                          >
+                            Remove Lab Test
+                          </button>
                         </div>
                       ))}
 
-                      <div>
-                        <button type="button" onClick={() => push({ testName: '', value: '', units: '', flagged: false })} className="text-sm text-blue-600">+ Add lab test</button>
-                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => push({ 
+                          testName: '', 
+                          value: '', 
+                          units: '', 
+                          referenceRange: '',
+                          flagged: false,
+                          status: 'ordered',
+                          collectedAt: '',
+                          reportedAt: ''
+                        })} 
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        + Add lab test
+                      </button>
                     </div>
                   )}
                 </FieldArray>
               </div>
 
-              {/* Imaging */}
               <div className="border-t pt-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Imaging Reports</h3>
                 <FieldArray name="imaging">
                   {({ push, remove, form }) => (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {(form.values.imaging || []).map((img, idx) => (
-                        <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                          <div>
-                            <label className="block text-sm text-gray-600">Modality</label>
-                            <Field as="select" name={`imaging.${idx}.modality`} className="w-full px-3 py-2 border rounded">
-                              <option value="XRAY">XRAY</option>
-                              <option value="USG">USG</option>
-                              <option value="CT">CT</option>
-                              <option value="MRI">MRI</option>
-                              <option value="ECG">ECG</option>
-                              <option value="OTHER">OTHER</option>
-                            </Field>
+                        <div key={idx} className="border p-4 rounded-lg bg-gray-50">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Modality *</label>
+                              <Field 
+                                as="select" 
+                                name={`imaging.${idx}.modality`} 
+                                className="w-full px-3 py-2 border rounded"
+                              >
+                                <option value="XRAY">X-Ray</option>
+                                <option value="USG">Ultrasound (USG)</option>
+                                <option value="CT">CT Scan</option>
+                                <option value="MRI">MRI</option>
+                                <option value="ECG">ECG</option>
+                                <option value="OTHER">Other</option>
+                              </Field>
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Body Part/Study</label>
+                              <Field 
+                                name={`imaging.${idx}.studyName`} 
+                                className="w-full px-3 py-2 border rounded" 
+                                placeholder="e.g., Chest, Abdomen"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-sm text-gray-600">Report</label>
-                            <Field name={`imaging.${idx}.report`} className="w-full px-3 py-2 border rounded" />
+
+                          <div className="mb-3">
+                            <label className="block text-sm text-gray-600">Report/Findings</label>
+                            <Field 
+                              as="textarea"
+                              name={`imaging.${idx}.report`} 
+                              rows={3}
+                              className="w-full px-3 py-2 border rounded" 
+                              placeholder="Enter imaging findings and interpretation"
+                            />
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => remove(idx)} className="text-red-500">Remove</button>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm text-gray-600">Performed At</label>
+                              <Field 
+                                type="datetime-local" 
+                                name={`imaging.${idx}.performedAt`} 
+                                className="w-full px-3 py-2 border rounded" 
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-600">Reported At</label>
+                              <Field 
+                                type="datetime-local" 
+                                name={`imaging.${idx}.reportedAt`} 
+                                className="w-full px-3 py-2 border rounded" 
+                              />
+                            </div>
                           </div>
+
+                          <button 
+                            type="button" 
+                            onClick={() => remove(idx)} 
+                            className="mt-3 text-red-500 hover:text-red-700 text-sm"
+                          >
+                            Remove Imaging Report
+                          </button>
                         </div>
                       ))}
 
-                      <div>
-                        <button type="button" onClick={() => push({ modality: 'XRAY', report: '' })} className="text-sm text-blue-600">+ Add imaging</button>
-                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => push({ 
+                          modality: 'XRAY', 
+                          report: '',
+                          studyName: '',
+                          performedAt: '',
+                          reportedAt: ''
+                        })} 
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        + Add imaging report
+                      </button>
                     </div>
                   )}
                 </FieldArray>

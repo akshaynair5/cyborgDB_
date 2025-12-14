@@ -6,7 +6,8 @@ getPrescriptions,
 getPrescriptionById,
 updatePrescription,
 deletePrescription,
-getPrescriptionsForPatient
+getPrescriptionsForPatient,
+getPrescriptionsForEncounter
 } from '../controllers/prescription.controller.js';
 
 const prescriptionRouter = Router();
@@ -16,14 +17,11 @@ prescriptionRouter.route('/')
 .post(verifyJWT, createPrescription)
 .get(verifyJWT, getPrescriptions);
 
-
-prescriptionRouter.route('/:id')
-.get(verifyJWT, getPrescriptionById)
-.patch(verifyJWT, updatePrescription)
-.delete(verifyJWT, deletePrescription);
-
 // patient-scoped list must come before the '/:id' wildcard
 prescriptionRouter.get('/patient/:id', verifyJWT, getPrescriptionsForPatient);
+
+// encounter-scoped list
+prescriptionRouter.get('/encounter/:encounterId', verifyJWT, getPrescriptionsForEncounter);
 
 prescriptionRouter.route('/:id')
 .get(verifyJWT, getPrescriptionById)

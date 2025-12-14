@@ -11,26 +11,55 @@ import cyborgClient from "../utils/cyborg.client.js";
 
 
 export const createEncounter = asyncHandler(async (req, res) => {
-    const data = req.body;
-    data.hospital = req.user.hospital;
-    // model uses `seenBy`
-    data.seenBy = req.user._id;
+  const {
+    patient,
+    encounterType,
+    chiefComplaint,
+    historyOfPresentIllness,
+    examination,
+    vitals,
+    notes,
+    startedAt,
+    diagnoses = [],
+    prescriptions = [],
+    labs = [],
+    imaging = [],
+  } = req.body;
 
-    const patient = await Patient.findById(data.patient);
-    if (!patient) throw new ApiError(404, "Patient not found");
+  const patientDoc = await Patient.findById(patient);
+  if (!patientDoc) throw new ApiError(404, 'Patient not found');
 
-    const encounter = await Encounter.create(data);
+  const encounter = await Encounter.create({
+    patient,
+    hospital: req.user.hospital,
+    seenBy: req.user._id,
+    encounterType,
+    chiefComplaint,
+    historyOfPresentIllness,
+    examination,
+    vitals,
+    notes,
+    startedAt,
 
-    const populated = await Encounter.findById(encounter._id)
-        .populate('patient')
-        .populate('diagnoses')
-        .populate('prescriptions')
-        .populate('labs')
-        .populate('imaging')
-        .populate('seenBy', 'firstName lastName role')
-        .lean();
+    // 🔥 FORCE CAST ARRAYS
+    diagnoses: diagnoses.map(id => mongoose.Types.ObjectId(id)),
+    prescriptions: prescriptions.map(id => mongoose.Types.ObjectId(id)),
+    labs: labs.map(id => mongoose.Types.ObjectId(id)),
+    imaging: imaging.map(id => mongoose.Types.ObjectId(id)),
+  });
 
-    return res.status(201).json(new ApiResponse(201, { encounter: populated }));
+//   const populated = await Encounter.findById(encounter._id)
+//     .populate('patient')
+//     .populate('diagnoses')
+//     .populate('prescriptions')
+//     .populate('labs')
+//     .populate('imaging')
+//     .populate('seenBy', 'firstName lastName role')
+//     .lean();
+
+  return res.status(201).json(
+    new ApiResponse(201, { encounter: populated })
+  );
 });
 
 
@@ -41,6 +70,9 @@ export const getEncounters = asyncHandler(async (req, res) => {
         .populate('patient', 'firstName lastName hospitalId dob gender')
         .populate('seenBy', 'firstName lastName role')
         .populate('diagnoses')
+        .populate('prescriptions')
+        .populate('labs')
+        .populate('imaging')
         .lean();
 
     return res.status(200).json(new ApiResponse(200, { encounters }));
@@ -69,26 +101,30 @@ function redactForCrossHospital(encounterObj) {
 
 
 export const getEncounterById = asyncHandler(async (req, res) => {
-    const encounter = await Encounter.findById(req.params.id)
-        .populate('patient')
-        .populate('diagnoses')
-        .populate('prescriptions')
-        .populate({ path: 'labs', populate: { path: 'orderedBy', select: 'firstName lastName' } })
-        .populate('imaging')
-        .populate('seenBy', 'firstName lastName role hospital')
-        .lean();
+  const encounter = await Encounter.findById(req.params.id)
+    // .populate('patient')
+    // .populate('diagnoses')
+    .populate({
+      path: 'prescriptions',
+      populate: {
+        path: 'prescribedBy',
+        select: 'firstName lastName role'
+      }
+    })
+    .populate({
+      path: 'labs',
+      populate: {
+        path: 'orderedBy',
+        select: 'firstName lastName'
+      }
+    })
+    .populate('imaging')
+    .populate('seenBy', 'firstName lastName role hospital')
+    .lean();
 
-    if (!encounter) throw new ApiError(404, "Encounter not found");
+  if (!encounter) throw new ApiError(404, 'Encounter not found');
 
-    const requesterHospital = String(req.user.hospital || '');
-    const patientHospital = encounter.patient && encounter.patient.hospital ? String(encounter.patient.hospital) : null;
-
-    if (!patientHospital || requesterHospital === patientHospital) {
-        return res.status(200).json(new ApiResponse(200, { encounter }));
-    }
-
-    const redacted = redactForCrossHospital(encounter);
-    return res.status(200).json(new ApiResponse(200, { encounter: redacted }));
+  return res.status(200).json(new ApiResponse(200, { encounter }));
 });
 
 
@@ -113,6 +149,31 @@ export const updateEncounter = asyncHandler(async (req, res) => {
         // send populated encounter (full) to Cyborg microservice asynchronously
         cyborgClient.upsertEncounter(encounter).catch(() => {});
     }
+
+    return res.status(200).json(new ApiResponse(200, { encounter }));
+});
+
+
+export const endEncounter = asyncHandler(async (req, res) => {
+    const encounter = await Encounter.findByIdAndUpdate(
+        req.params.id,
+        { endedAt: new Date() },
+        { new: true }
+    )
+        .populate('patient')
+        .populate('diagnoses')
+        .populate('prescriptions')
+        .populate('labs')
+        .populate('imaging')
+        .populate('seenBy', 'firstName lastName role')
+        .lean();
+
+    if (!encounter) throw new ApiError(404, "Encounter not found");
+
+    // Send to Cyborg microservice asynchronously
+    cyborgClient.upsertEncounter(encounter).catch((err) => {
+        console.warn('Cyborg upsert failed:', err.message);
+    });
 
     return res.status(200).json(new ApiResponse(200, { encounter }));
 });

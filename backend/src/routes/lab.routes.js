@@ -5,7 +5,8 @@ createLabResult,
 getLabResults,
 getLabResultById,
 updateLabResult,
-deleteLabResult
+deleteLabResult,
+getLabResultsForEncounter
 } from '../controllers/lab.controller.js';
 
 
@@ -16,6 +17,8 @@ labRouter.route('/')
 .post(verifyJWT, createLabResult)
 .get(verifyJWT, getLabResults);
 
+// encounter-scoped list must come before the '/:id' wildcard
+labRouter.get('/encounter/:encounterId', verifyJWT, getLabResultsForEncounter);
 
 labRouter.route('/:id')
 .get(verifyJWT, getLabResultById)

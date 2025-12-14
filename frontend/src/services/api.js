@@ -186,6 +186,11 @@ class APIClient {
     return this.client.patch(`/encounters/${id}`, data);
   }
 
+  // End an encounter (sets endedAt and sends to Cyborg for vector storage)
+  endEncounter(id) {
+    return this.client.post(`/encounters/${id}/end`);
+  }
+
   deleteEncounter(id) {
     return this.client.delete(`/encounters/${id}`);
   }
@@ -207,6 +212,11 @@ class APIClient {
   // Get prescriptions for a specific patient (patient-scoped)
   getPrescriptionsForPatient(patientId) {
     return this.client.get(`/prescriptions/patient/${patientId}`);
+  }
+
+  // Get prescriptions for a specific encounter (encounter-scoped)
+  getPrescriptionsForEncounter(encounterId) {
+    return this.client.get(`/prescriptions/encounter/${encounterId}`);
   }
 
   getPrescriptionById(id) {
@@ -243,6 +253,11 @@ class APIClient {
     return this.client.get(`/labs/${id}`);
   }
 
+  // Get lab results for a specific encounter (encounter-scoped)
+  getLabResultsForEncounter(encounterId) {
+    return this.client.get(`/labs/encounter/${encounterId}`);
+  }
+
   createLabResult(data) {
     return this.client.post('/labs', data);
   }
@@ -273,6 +288,11 @@ class APIClient {
     return this.client.get(`/imaging/${id}`);
   }
 
+  // Get imaging reports for a specific encounter (encounter-scoped)
+  getImagingReportsForEncounter(encounterId) {
+    return this.client.get(`/imaging/encounter/${encounterId}`);
+  }
+
   createImagingReport(data) {
     return this.client.post('/imaging', data);
   }
@@ -296,23 +316,28 @@ class APIClient {
    * -------------------------------------------------------------------------- */
 
   getDiagnoses() {
-    return this.client.get('/diagnosis');
+    return this.client.get('/diagnoses');
   }
 
   getDiagnosisById(id) {
-    return this.client.get(`/diagnosis/${id}`);
+    return this.client.get(`/diagnoses/${id}`);
+  }
+
+  // Get diagnoses for a specific encounter (encounter-scoped)
+  getDiagnosesForEncounter(encounterId) {
+    return this.client.get(`/diagnoses/encounter/${encounterId}`);
   }
 
   createDiagnosis(data) {
-    return this.client.post('/diagnosis', data);
+    return this.client.post('/diagnoses', data);
   }
 
   updateDiagnosis(id, data) {
-    return this.client.patch(`/diagnosis/${id}`, data);
+    return this.client.patch(`/diagnoses/${id}`, data);
   }
 
   deleteDiagnosis(id) {
-    return this.client.delete(`/diagnosis/${id}`);
+    return this.client.delete(`/diagnoses/${id}`);
   }
 
   /* --------------------------------------------------------------------------
