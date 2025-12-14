@@ -52,47 +52,40 @@ export const registerUser = asyncHandler(async (req, res) => {
     return res.status(201).json(new ApiResponse(200, createdUser, "User registered successfully"));
 });
 
-export const loginUser = asyncHandler(async (req,res)=>{
+export const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
 
-    const {email,username,password} = req.body
+  if (!email || !password) {
+    throw new ApiError(400, "Email and password are required");
+  }
 
-    if(!username && !email){
-        throw new ApiError(400,"Username or email is required")
-    }
+  const user = await User.findOne({ email });
 
-    const userExists = await User.findOne({
-        $or: [{username},{email}]
+  if (!user) {
+    throw new ApiError(401, "User does not exist");
+  }
+
+  const isPasswordValid = await user.isPasswordCorrect(password);
+
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Incorrect password");
+  }
+
+  const { refreshToken, accessToken } =
+    await generateAccessAndRefreshTokens(user._id);
+
+  const loggedInUser = await User.findById(user._id)
+    .select("-password -refreshToken");
+
+  return res.status(200).json(
+    new ApiResponse(200, {
+      user: loggedInUser,
+      accessToken,
+      refreshToken
     })
-
-    if(!userExists){
-        throw new ApiError(401,"username or email does not exist")
-    }
-
-    const isPasswordValid = await userExists.isPasswordCorrect(password)
-    if(!isPasswordValid){
-        throw new ApiError(401,"Incorrect password")
-    }   
-
-    const {refreshToken,accessToken} = await generateAccessAndRefreshTokens(userExists._id)
-
-    const loggedInUser = await User.findById(userExists._id).select(
-        "-password -refreshToken"
-    )
-
-    const options = {
-        httpOnly: true,               
-        secure: true
-    }
-
-    return res.status(200)
-    .cookie("accessToken",accessToken,options)
-    .cookie("refreshToken",refreshToken,options)
-    .json(new ApiResponse(200,{
-        user: loggedInUser,
-        accessToken,
-        refreshToken
-    }))
+  );
 });
+
 
 export const logoutUser = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, { $unset: { refreshToken: 1 } });
