@@ -3,22 +3,30 @@ import { Patient } from "../models/patient.model.js";
 import ApiError from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { Encounter } from "../models/encounter.model.js";
 
 
 export const createLabResult = asyncHandler(async (req, res) => {
-const data = req.body;
-data.hospital = req.user.hospital;
-data.orderedBy = req.user._id;
+  const data = req.body;
+  data.hospital = req.user.hospital;
+  data.orderedBy = req.user._id;
 
+  const patient = await Patient.findById(data.patient);
+  if (!patient) throw new ApiError(404, "Patient not found");
 
-const patient = await Patient.findById(data.patient);
-if (!patient) throw new ApiError(404, "Patient not found");
+  if (!data.encounter) {
+    throw new ApiError(400, "Encounter ID is required for lab result");
+  }
 
+  const lab = await LabResult.create(data);
 
-const lab = await LabResult.create(data);
+  // LINK LAB TO ENCOUNTER
+  await Encounter.findByIdAndUpdate(
+    data.encounter,
+    { $push: { labs: lab._id } }
+  );
 
-
-return res.status(201).json(new ApiResponse(201, { lab }));
+  return res.status(201).json(new ApiResponse(201, { lab }));
 });
 
 

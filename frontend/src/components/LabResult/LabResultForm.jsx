@@ -7,8 +7,12 @@ import toast from 'react-hot-toast';
 import { useApp } from '../../context/AppContext';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 
+/* =======================
+   VALIDATION SCHEMA
+======================= */
 const labResultSchema = Yup.object().shape({
   patient: Yup.string().required('Patient is required'),
+  encounter: Yup.string().required('Encounter is required'),
   tests: Yup.array().of(
     Yup.object().shape({
       testName: Yup.string().required('Test name is required'),
@@ -22,49 +26,63 @@ export const LabResultForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useApp();
+
   const [patients, setPatients] = useState([]);
   const [encounters, setEncounters] = useState([]);
   const [labResult, setLabResult] = useState(null);
   const [loading, setLoading] = useState(!!id);
 
+  /* =======================
+     EFFECTS
+  ======================= */
   useEffect(() => {
     fetchPatients();
   }, []);
 
   useEffect(() => {
-    const pid = labResult?.patient || null;
-    if (pid) fetchEncountersForPatient(pid);
-  }, [labResult]);
-
-  useEffect(() => {
-    if (id) {
-      fetchLabResult();
-    }
+    if (id) fetchLabResult();
   }, [id]);
 
+  /* =======================
+     API CALLS
+  ======================= */
   const fetchPatients = async () => {
     try {
-      const response = await api.getPatients(user?.hospital || '');
-      const pts = response?.data?.data?.patients || response?.data?.patients || response?.data || [];
+      const res = await api.getPatients(user?.hospital || '');
+      const pts = res?.data?.data?.patients || res?.data?.patients || res?.data || [];
       setPatients(pts);
-    } catch (error) {
+    } catch {
       toast.error('Failed to fetch patients');
+    }
+  };
+
+  const fetchEncountersForPatient = async (patientId) => {
+    try {
+      const res = await api.getEncountersForPatient(patientId);
+      const list = res?.data?.data?.encounters || res?.data?.encounters || res?.data || [];
+      setEncounters(list);
+    } catch {
+      setEncounters([]);
     }
   };
 
   const fetchLabResult = async () => {
     try {
-      const response = await api.getLabResultById(id);
-      if (response.data && response.data.length > 0) {
-        setLabResult(response.data[0]);
+      const res = await api.getLabResultById(id);
+      if (res.data?.length) {
+        setLabResult(res.data[0]);
+        fetchEncountersForPatient(res.data[0].patient);
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to fetch lab result');
     } finally {
       setLoading(false);
     }
   };
 
+  /* =======================
+     INITIAL VALUES
+  ======================= */
   const initialValues = labResult || {
     patient: '',
     encounter: '',
@@ -75,34 +93,43 @@ export const LabResultForm = () => {
     status: 'ordered',
   };
 
+  /* =======================
+     SUBMIT HANDLER
+  ======================= */
   const handleSubmit = async (values) => {
-    try {
-      values.hospital = user?.hospital;
-      if (id) {
-        await api.updateLabResult(id, values);
-        toast.success('Lab result updated successfully');
-      } else {
-        await api.createLabResult(values);
-        toast.success('Lab result created successfully');
-      }
-      navigate('/lab-results');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to save lab result');
+  try {
+    if (!values.encounter) {
+      toast.error('Encounter is required');
+      return;
     }
-  };
 
-  const fetchEncountersForPatient = async (patientId) => {
-    try {
-      const res = await api.getEncountersForPatient(patientId);
-      const all = res?.data?.data?.encounters || res?.data?.encounters || res?.data || [];
-      setEncounters(all);
-    } catch (err) {
-      setEncounters([]);
+    const payload = {
+      ...values,
+      encounterId: values.encounter, // ✅ map correctly
+      hospital: user?.hospital,
+    };
+
+    delete payload.encounter; // optional but clean
+
+    if (id) {
+      await api.updateLabResult(id, payload);
+      toast.success('Lab result updated successfully');
+    } else {
+      await api.createLabResult(payload);
+      toast.success('Lab result created successfully');
     }
-  };
+
+    navigate('/lab-results');
+  } catch (error) {
+    toast.error(error.response?.data?.message || 'Failed to save lab result');
+  }
+};
 
   if (loading) return <div className="text-center py-10">Loading...</div>;
 
+  /* =======================
+     JSX
+  ======================= */
   return (
     <div className="space-y-6">
       <button
@@ -121,207 +148,96 @@ export const LabResultForm = () => {
           onSubmit={handleSubmit}
           enableReinitialize
         >
-          {({ isSubmitting, values }) => (
+          {({ values, setFieldValue, isSubmitting }) => (
             <Form className="space-y-6">
+
+              {/* ================= PATIENT & ENCOUNTER ================= */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Patient */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
-                  <Field name="patient">
-                    {({ field, form }) => (
-                      <select
-                        {...field}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        onChange={(e) => {
-                          form.setFieldValue('patient', e.target.value);
-                          fetchEncountersForPatient(e.target.value);
-                        }}
-                      >
-                        <option value="">Select a patient</option>
-                        {patients.length > 0 && patients.map((p) => (
-                          <option key={p._id} value={p._id}>
-                            {p.firstName} {p.lastName} ({p.hospitalId})
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                  <label className="block text-sm font-medium mb-2">Patient</label>
+                  <Field
+                    as="select"
+                    name="patient"
+                    className="w-full px-4 py-2 border rounded-lg"
+                    onChange={(e) => {
+                      setFieldValue('patient', e.target.value);
+                      setFieldValue('encounter', '');
+                      fetchEncountersForPatient(e.target.value);
+                    }}
+                  >
+                    <option value="">Select patient</option>
+                    {patients.map(p => (
+                      <option key={p._id} value={p._id}>
+                        {p.firstName} {p.lastName}
+                      </option>
+                    ))}
                   </Field>
-                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
+                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm" />
                 </div>
 
+                {/* Encounter */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Encounter (optional)</label>
-                  <Field as="select" name="encounter" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">Select an encounter (optional)</option>
-                    {encounters.map((c) => (
+                  <label className="block text-sm font-medium mb-2">Encounter</label>
+                  <Field
+                    as="select"
+                    name="encounter"
+                    className="w-full px-4 py-2 border rounded-lg"
+                  >
+                    <option value="">Select encounter</option>
+                    {encounters.map(c => (
                       <option key={c._id} value={c._id}>
                         {new Date(c.startedAt).toLocaleString()} — {c.encounterType}
                       </option>
                     ))}
                   </Field>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <Field
-                    as="select"
-                    name="status"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="ordered">Ordered</option>
-                    <option value="collected">Collected</option>
-                    <option value="reported">Reported</option>
-                    <option value="cancelled">Cancelled</option>
-                  </Field>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Collected At</label>
-                  <Field
-                    type="date"
-                    name="collectedAt"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Reported At</label>
-                  <Field
-                    type="date"
-                    name="reportedAt"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <ErrorMessage name="encounter" component="p" className="text-red-500 text-sm" />
                 </div>
               </div>
 
-              {/* Lab Tests */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Test Results</h3>
-                <FieldArray name="tests">
-                  {(arrayHelpers) => (
-                    <div className="space-y-4">
-                      {values.tests && values.tests.length > 0 ? (
-                        values.tests.map((test, index) => (
-                          <div key={index} className="border rounded-lg p-4 bg-gray-50 space-y-3">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Test Name
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`tests.${index}.testName`}
-                                  placeholder="e.g., Hemoglobin"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <ErrorMessage
-                                  name={`tests.${index}.testName`}
-                                  component="p"
-                                  className="text-red-500 text-sm mt-1"
-                                />
-                              </div>
+              {/* ================= TESTS ================= */}
+              <FieldArray name="tests">
+                {({ push, remove }) => (
+                  <>
+                    {values.tests.map((_, i) => (
+                      <div key={i} className="border p-4 rounded-lg bg-gray-50">
+                        <Field name={`tests.${i}.testName`} placeholder="Test Name" className="input" />
+                        <Field name={`tests.${i}.value`} placeholder="Value" className="input" />
+                        <Field name={`tests.${i}.units`} placeholder="Units" className="input" />
 
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Value
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`tests.${index}.value`}
-                                  placeholder="e.g., 13.5"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
+                        {values.tests.length > 1 && (
+                          <button type="button" onClick={() => remove(i)} className="text-red-600">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => push({ testName: '', value: '', units: '' })}>
+                      <Plus size={18} /> Add Test
+                    </button>
+                  </>
+                )}
+              </FieldArray>
 
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Units
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`tests.${index}.units`}
-                                  placeholder="e.g., g/dL"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Reference Range
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`tests.${index}.referenceRange`}
-                                  placeholder="e.g., 12-16"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div className="md:col-span-2 flex items-center">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <Field
-                                    type="checkbox"
-                                    name={`tests.${index}.flagged`}
-                                    className="w-4 h-4 rounded border-gray-300"
-                                  />
-                                  <span className="text-sm font-medium text-gray-700">
-                                    Flag as abnormal
-                                  </span>
-                                </label>
-                              </div>
-                            </div>
-
-                            {values.tests.length > 1 && (
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => arrayHelpers.remove(index)}
-                                  className="text-red-600 hover:text-red-800 flex items-center gap-2"
-                                >
-                                  <Trash2 size={18} /> Remove
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : null}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          arrayHelpers.push({
-                            testName: '',
-                            value: '',
-                            units: '',
-                            referenceRange: '',
-                            flagged: false,
-                          })
-                        }
-                        className="text-blue-600 hover:text-blue-800 flex items-center gap-2 font-medium"
-                      >
-                        <Plus size={18} /> Add Test
-                      </button>
-                    </div>
-                  )}
-                </FieldArray>
-              </div>
-
-              {/* Form Actions */}
-              <div className="flex gap-4 border-t pt-6">
+              {/* ================= ACTIONS ================= */}
+              <div className="flex gap-4 pt-6">
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50"
+                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg"
                 >
-                  {isSubmitting ? 'Saving...' : 'Save Lab Result'}
+                  Save Lab Result
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate('/lab-results')}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition"
+                  className="flex-1 bg-gray-300 py-2 rounded-lg"
                 >
                   Cancel
                 </button>
               </div>
+
             </Form>
           )}
         </Formik>

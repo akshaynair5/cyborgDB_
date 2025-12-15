@@ -3,21 +3,29 @@ import { Patient } from "../models/patient.model.js";
 import ApiError from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { Encounter } from "../models/encounter.model.js";
 
 
 export const createImagingReport = asyncHandler(async (req, res) => {
-    const data = req.body;
-    data.hospital = req.user.hospital;
+  const data = req.body;
+  data.hospital = req.user.hospital;
 
+  const patient = await Patient.findById(data.patient);
+  if (!patient) throw new ApiError(404, "Patient not found");
 
-    const patient = await Patient.findById(data.patient);
-    if (!patient) throw new ApiError(404, "Patient not found");
+  if (!data.encounter) {
+    throw new ApiError(400, "Encounter ID is required for imaging report");
+  }
 
+  const imaging = await ImagingReport.create(data);
 
-    const imaging = await ImagingReport.create(data);
+  // 🔥 LINK IMAGING TO ENCOUNTER
+  await Encounter.findByIdAndUpdate(
+    data.encounter,
+    { $push: { imaging: imaging._id } }
+  );
 
-
-    return res.status(201).json(new ApiResponse(201, { imaging }));
+  return res.status(201).json(new ApiResponse(201, { imaging }));
 });
 
 
