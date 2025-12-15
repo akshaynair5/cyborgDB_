@@ -28,7 +28,8 @@ export const createPrescription = asyncHandler(async (req, res) => {
 });
 
 export const getPrescriptions = asyncHandler(async (req, res) => {
-    const prescriptions = await Prescription.find({ hospital: req.user.hospital });
+    const prescriptions = await Prescription.find({ hospital: req.user.hospital }).populate({path: 'patient', select: 'firstName lastName'}).populate('prescribedBy', 'firstName lastName').sort({ createdAt: -1 });
+    console.log("Prescriptions fetched:", prescriptions.length);
     return res.status(200).json(new ApiResponse(200, { prescriptions }));
 });
 

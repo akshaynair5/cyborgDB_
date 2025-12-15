@@ -23,7 +23,7 @@ return res.status(201).json(new ApiResponse(201, { lab }));
 
 
 export const getLabResults = asyncHandler(async (req, res) => {
-const labs = await LabResult.find({ hospital: req.user.hospital });
+const labs = await LabResult.find({ hospital: req.user.hospital }).populate({path: 'patient', select: 'firstName lastName'}).sort({ createdAt: -1 });
 return res.status(200).json(new ApiResponse(200, { labs }));
 });
 

@@ -22,13 +22,16 @@ export const createImagingReport = asyncHandler(async (req, res) => {
 
 
 export const getImagingReports = asyncHandler(async (req, res) => {
-    const imaging = await ImagingReport.find({ hospital: req.user.hospital });
+    const imaging = await ImagingReport.find({ hospital: req.user.hospital }).populate({
+      path: 'patient',
+      select: 'firstName lastName'
+    }).sort({ createdAt: -1 });
     return res.status(200).json(new ApiResponse(200, { imaging }));
 });
 
 
 export const getImagingReportById = asyncHandler(async (req, res) => {
-    const imaging = await ImagingReport.findById(req.params.id);
+    const imaging = await ImagingReport.findById(req.params.id).populate('patient');
     if (!imaging) throw new ApiError(404, "Imaging report not found");
 
 
