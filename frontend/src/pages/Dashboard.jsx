@@ -172,6 +172,8 @@ const calculatePercentageChange = (current, previous) => {
   return ((current - previous) / previous * 100).toFixed(1);
 };
 
+
+
 // ============================================================================
 // SUBCOMPONENTS (Defined OUTSIDE Dashboard)
 // ============================================================================

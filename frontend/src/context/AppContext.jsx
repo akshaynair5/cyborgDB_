@@ -33,17 +33,32 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem('user');
   };
 
+  // ✅ ROLE HELPERS
+  const role = user?.role;
+  const isDoctor = role === 'doctor';
+  const isNurse = role === 'nurse';
+  const isStaff = role === 'staff';
+
   return (
-    <AppContext.Provider value={{ user, hospital, isLoading, login, logout, setHospital, currentPatient, setCurrentPatient, currentEncounter, setCurrentEncounter }}>
+    <AppContext.Provider
+      value={{
+        user,
+        role,
+        isDoctor,
+        isNurse,
+        isStaff,
+        hospital,
+        isLoading,
+        login,
+        logout,
+        setHospital,
+        currentPatient,
+        setCurrentPatient,
+        currentEncounter,
+        setCurrentEncounter,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
-};
-
-export const useApp = () => {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within AppProvider');
-  }
-  return context;
 };
