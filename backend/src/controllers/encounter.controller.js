@@ -8,6 +8,7 @@ import ApiError from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import cyborgClient from "../utils/cyborg.client.js";
+import mongoose from "mongoose";
 
 
 export const createEncounter = asyncHandler(async (req, res) => {
@@ -27,7 +28,15 @@ export const createEncounter = asyncHandler(async (req, res) => {
   } = req.body;
 
   const patientDoc = await Patient.findById(patient);
-  if (!patientDoc) throw new ApiError(404, 'Patient not found');
+  if (!patientDoc) throw new ApiError(404, "Patient not found");
+
+  const toObjectIds = (arr) =>
+    arr.map(id => {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        throw new ApiError(400, `Invalid ObjectId: ${id}`);
+      }
+      return new mongoose.Types.ObjectId(id);
+    });
 
   const encounter = await Encounter.create({
     patient,
@@ -40,25 +49,14 @@ export const createEncounter = asyncHandler(async (req, res) => {
     vitals,
     notes,
     startedAt,
-
-    // 🔥 FORCE CAST ARRAYS
-    diagnoses: diagnoses.map(id => mongoose.Types.ObjectId(id)),
-    prescriptions: prescriptions.map(id => mongoose.Types.ObjectId(id)),
-    labs: labs.map(id => mongoose.Types.ObjectId(id)),
-    imaging: imaging.map(id => mongoose.Types.ObjectId(id)),
+    diagnoses: toObjectIds(diagnoses),
+    prescriptions: toObjectIds(prescriptions),
+    labs: toObjectIds(labs),
+    imaging: toObjectIds(imaging),
   });
 
-//   const populated = await Encounter.findById(encounter._id)
-//     .populate('patient')
-//     .populate('diagnoses')
-//     .populate('prescriptions')
-//     .populate('labs')
-//     .populate('imaging')
-//     .populate('seenBy', 'firstName lastName role')
-//     .lean();
-
   return res.status(201).json(
-    new ApiResponse(201, { encounter: populated })
+    new ApiResponse(201, { encounter })
   );
 });
 
@@ -67,7 +65,7 @@ export const getEncounters = asyncHandler(async (req, res) => {
     const encounters = await Encounter.find({ hospital: req.user.hospital })
         .sort({ startedAt: -1 })
         .limit(200)
-        .populate('patient', 'firstName lastName hospitalId dob gender')
+        .populate('patient', 'firstName lastName dob gender')
         .populate('seenBy', 'firstName lastName role')
         .populate('diagnoses')
         .populate('prescriptions')
@@ -102,8 +100,8 @@ function redactForCrossHospital(encounterObj) {
 
 export const getEncounterById = asyncHandler(async (req, res) => {
   const encounter = await Encounter.findById(req.params.id)
-    // .populate('patient')
-    // .populate('diagnoses')
+    .populate('patient')
+    .populate('diagnoses')
     .populate({
       path: 'prescriptions',
       populate: {

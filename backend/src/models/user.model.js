@@ -34,6 +34,7 @@ const userSchema = new mongoose.Schema({
       'doctor',
       'nurse',
       'admin',
+      'staff',
       'receptionist',
       'lab_technician',
       'pharmacist'

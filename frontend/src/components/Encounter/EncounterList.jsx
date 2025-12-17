@@ -33,6 +33,7 @@ export const EncounterList = () => {
     try {
       const res = await api.getEncounters();
       const list = res?.data?.message?.encounters || res?.data?.encounters || res?.data || [];
+      console.log("Encounters fetched:", list);
       setEncounters(list);
     } catch (err) {
       console.error(err);
@@ -87,9 +88,9 @@ export const EncounterList = () => {
               {filtered.length > 0 ? (
                 filtered.map((e) => (
                   <tr key={e._id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4">{e.patientName || 'Unknown'}</td>
+                    <td className="px-6 py-4">{e.patient.firstName +  ' ' + e.patient.lastName}</td>
                     <td className="px-6 py-4">{e.encounterType}</td>
-                    <td className="px-6 py-4">{e.seenByName || e.seenBy?.name || '-'}</td>
+                    <td className="px-6 py-4">{e.seenBy.firstName +  ' ' + e.seenBy.lastName} </td>
                     <td className="px-6 py-4">{e.startedAt ? new Date(e.startedAt).toLocaleString() : '-'}</td>
                     <td className="px-6 py-4">
                       <div className="flex gap-3">

@@ -34,12 +34,26 @@ export const AppProvider = ({ children }) => {
   };
 
   return (
-    <AppContext.Provider value={{ user, hospital, isLoading, login, logout, setHospital, currentPatient, setCurrentPatient, currentEncounter, setCurrentEncounter }}>
+    <AppContext.Provider
+      value={{
+        user,
+        hospital,
+        isLoading,
+        login,
+        logout,
+        setHospital,
+        currentPatient,
+        setCurrentPatient,
+        currentEncounter,
+        setCurrentEncounter,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
 };
 
+/* ✅ THIS EXPORT IS CRITICAL */
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
