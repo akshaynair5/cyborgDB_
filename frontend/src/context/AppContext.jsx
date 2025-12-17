@@ -33,20 +33,10 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem('user');
   };
 
-  // ✅ ROLE HELPERS
-  const role = user?.role;
-  const isDoctor = role === 'doctor';
-  const isNurse = role === 'nurse';
-  const isStaff = role === 'staff';
-
   return (
     <AppContext.Provider
       value={{
         user,
-        role,
-        isDoctor,
-        isNurse,
-        isStaff,
         hospital,
         isLoading,
         login,
@@ -61,4 +51,13 @@ export const AppProvider = ({ children }) => {
       {children}
     </AppContext.Provider>
   );
+};
+
+/* ✅ THIS EXPORT IS CRITICAL */
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within AppProvider');
+  }
+  return context;
 };
