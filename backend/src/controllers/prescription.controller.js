@@ -43,6 +43,7 @@ export const getPrescriptions = asyncHandler(async (req, res) => {
   })
     .populate("patient", "firstName lastName")
     .populate("items")
+    .populate("prescribedBy", "firstName lastName")
     .sort({ createdAt: -1 });
 
   // 🔥 Transform for frontend table
@@ -50,6 +51,9 @@ export const getPrescriptions = asyncHandler(async (req, res) => {
     _id: p._id,
     patientName: p.patient
       ? `${p.patient.firstName} ${p.patient.lastName}`
+      : "Unknown",
+    prescribedByName: p.prescribedBy
+      ? `${p.prescribedBy.firstName} ${p.prescribedBy.lastName}`
       : "Unknown",
     medication: p.items?.[0]?.medication || "-",
     dosage: p.items?.[0]?.dosage || "-",

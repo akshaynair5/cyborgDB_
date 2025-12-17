@@ -9,6 +9,7 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 
 const prescriptionSchema = Yup.object().shape({
   patient: Yup.string().required('Patient is required'),
+  prescribedBy: Yup.string().required('Prescriber is required'),
   items: Yup.array().of(
     Yup.object().shape({
       name: Yup.string().required('Medicine name is required'),
@@ -24,47 +25,57 @@ export const PrescriptionForm = () => {
   const { id } = useParams();
   const { user } = useApp();
   const [patients, setPatients] = useState([]);
+  const [users, setUsers] = useState([]);
   const [encounters, setEncounters] = useState([]);
   const [prescription, setPrescription] = useState(null);
   const [loading, setLoading] = useState(!!id);
 
+  // Fetch patients and users
   useEffect(() => {
-    fetchPatients();
-  }, []);
-
-  useEffect(() => {
-    // if editing existing prescription prefetch encounters for selected patient
-    const pid = prescription?.patient || null;
-    if (pid) fetchEncountersForPatient(pid);
-  }, [prescription]);
-
-  useEffect(() => {
-    if (id) {
-      fetchPrescription();
-    }
-  }, [id]);
-
-  const fetchPatients = async () => {
-    try {
-      const response = await api.getPatients(user?.hospital || '');
-      // defensive: ApiResponse wrapper
-      const pts = response?.data?.data?.patients || response?.data?.patients || response?.data?.message?.patients || response?.data || [];
-      setPatients(pts);
-    } catch (error) {
-      toast.error('Failed to fetch patients');
-    }
-  };
-
-  const fetchPrescription = async () => {
-    try {
-      const response = await api.getPrescriptionById(id);
-      if (response.data && response.data.length > 0) {
-        setPrescription(response.data[0]);
+    const fetchData = async () => {
+      try {
+        const [patientsRes, usersRes] = await Promise.all([
+          api.getPatients(user?.hospital || ''),
+          api.getUsers(user?.hospital || ''),
+        ]);
+        setPatients(patientsRes?.data?.message?.patients || []);
+        setUsers(usersRes?.data?.message?.users || []);
+      } catch (error) {
+        toast.error('Failed to fetch patients or users');
       }
-    } catch (error) {
-      toast.error('Failed to fetch prescription');
-    } finally {
-      setLoading(false);
+    };
+    fetchData();
+  }, [user?.hospital]);
+
+  // Fetch prescription if editing
+  useEffect(() => {
+    if (!id) return;
+    const fetchPrescription = async () => {
+      try {
+        const res = await api.getPrescriptionById(id);
+        const presc = res?.data?.message?.prescription || res?.data?.prescription || res?.data;
+        setPrescription({
+          ...presc,
+          patient: presc?.patient?._id || '',
+          prescribedBy: presc?.prescribedBy?._id || user?._id || '',
+        });
+        if (presc?.patient?._id) fetchEncountersForPatient(presc.patient._id);
+      } catch (err) {
+        toast.error('Failed to fetch prescription');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPrescription();
+  }, [id, user?._id]);
+
+  const fetchEncountersForPatient = async (patientId) => {
+    if (!patientId) return setEncounters([]);
+    try {
+      const res = await api.getEncountersForPatient(patientId);
+      setEncounters(res?.data?.message?.encounters || res?.data?.encounters || []);
+    } catch {
+      setEncounters([]);
     }
   };
 
@@ -92,16 +103,6 @@ export const PrescriptionForm = () => {
     }
   };
 
-  const fetchEncountersForPatient = async (patientId) => {
-    try {
-      const res = await api.getEncountersForPatient(patientId);
-      const all = res?.data?.data?.encounters || res?.data?.encounters || res?.data || [];
-      setEncounters(all);
-    } catch (err) {
-      setEncounters([]);
-    }
-  };
-
   if (loading) return <div className="text-center py-10">Loading...</div>;
 
   return (
@@ -122,42 +123,61 @@ export const PrescriptionForm = () => {
           onSubmit={handleSubmit}
           enableReinitialize
         >
-          {({ isSubmitting, values }) => (
+          {({ isSubmitting, values, setFieldValue }) => (
             <Form className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
-                <Field name="patient">
-                  {({ field, form }) => (
-                    <select
-                      {...field}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      onChange={(e) => {
-                        form.setFieldValue('patient', e.target.value);
-                        fetchEncountersForPatient(e.target.value);
-                      }}
-                    >
-                      <option value="">Select a patient</option>
-                      {patients.map((p) => (
-                        <option key={p._id} value={p._id}>
-                          {p.firstName} {p.lastName} ({p.hospitalId})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </Field>
-                <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Patient */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
+                  <Field name="patient">
+                    {({ field }) => (
+                      <select
+                        {...field}
+                        onChange={(e) => {
+                          setFieldValue('patient', e.target.value);
+                          setFieldValue('encounter', '');
+                          fetchEncountersForPatient(e.target.value);
+                        }}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select a patient</option>
+                        {patients.map((p) => (
+                          <option key={p._id} value={p._id}>
+                            {p.firstName} {p.lastName} ({p.hospitalId})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Encounter (optional)</label>
-                <Field as="select" name="encounter" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select an encounter (optional)</option>
-                  {encounters.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {new Date(c.startedAt).toLocaleString()} — {c.encounterType}
-                    </option>
-                  ))}
-                </Field>
+                {/* Prescribed By */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Prescribed By</label>
+                  <Field as="select" name="prescribedBy" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select prescriber</option>
+                    {users.map((u) => (
+                      <option key={u._id} value={u._id}>
+                        Dr. {u.firstName} {u.lastName}
+                      </option>
+                    ))}
+                  </Field>
+                  <ErrorMessage name="prescribedBy" component="p" className="text-red-500 text-sm mt-1" />
+                </div>
+
+                {/* Encounter */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Encounter (optional)</label>
+                  <Field as="select" name="encounter" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select an encounter (optional)</option>
+                    {encounters.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {new Date(c.startedAt).toLocaleString()} — {c.encounterType}
+                      </option>
+                    ))}
+                  </Field>
+                </div>
               </div>
 
               {/* Prescription Items */}
@@ -166,117 +186,45 @@ export const PrescriptionForm = () => {
                 <FieldArray name="items">
                   {(arrayHelpers) => (
                     <div className="space-y-4">
-                      {values.items && values.items.length > 0 ? (
-                        values.items.map((item, index) => (
-                          <div key={index} className="border rounded-lg p-4 bg-gray-50 space-y-3">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Medicine Name
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`items.${index}.name`}
-                                  placeholder="e.g., Paracetamol"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <ErrorMessage
-                                  name={`items.${index}.name`}
-                                  component="p"
-                                  className="text-red-500 text-sm mt-1"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Dosage
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`items.${index}.dosage`}
-                                  placeholder="e.g., 500mg"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Frequency
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`items.${index}.frequency`}
-                                  placeholder="e.g., 3 times daily"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Duration (Days)
-                                </label>
-                                <Field
-                                  type="number"
-                                  name={`items.${index}.durationDays`}
-                                  placeholder="e.g., 7"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Instructions
-                                </label>
-                                <Field
-                                  type="text"
-                                  name={`items.${index}.instructions`}
-                                  placeholder="e.g., Take with food"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Quantity
-                                </label>
-                                <Field
-                                  type="number"
-                                  name={`items.${index}.quantity`}
-                                  placeholder="e.g., 30"
-                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                              </div>
+                      {values.items && values.items.length > 0 && values.items.map((item, index) => (
+                        <div key={index} className="border rounded-lg p-4 bg-gray-50 space-y-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Medicine Name</label>
+                              <Field type="text" name={`items.${index}.name`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                              <ErrorMessage name={`items.${index}.name`} component="p" className="text-red-500 text-sm mt-1" />
                             </div>
-
-                            {values.items.length > 1 && (
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => arrayHelpers.remove(index)}
-                                  className="text-red-600 hover:text-red-800 flex items-center gap-2"
-                                >
-                                  <Trash2 size={18} /> Remove
-                                </button>
-                              </div>
-                            )}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Dosage</label>
+                              <Field type="text" name={`items.${index}.dosage`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
+                              <Field type="text" name={`items.${index}.frequency`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Duration (Days)</label>
+                              <Field type="number" name={`items.${index}.durationDays`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Instructions</label>
+                              <Field type="text" name={`items.${index}.instructions`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                              <Field type="number" name={`items.${index}.quantity`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            </div>
                           </div>
-                        ))
-                      ) : null}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          arrayHelpers.push({
-                            name: '',
-                            dosage: '',
-                            frequency: '',
-                            durationDays: '',
-                            instructions: '',
-                            quantity: '',
-                          })
-                        }
-                        className="text-blue-600 hover:text-blue-800 flex items-center gap-2 font-medium"
-                      >
+                          {values.items.length > 1 && (
+                            <div className="flex justify-end">
+                              <button type="button" onClick={() => arrayHelpers.remove(index)} className="text-red-600 hover:text-red-800 flex items-center gap-2">
+                                <Trash2 size={18} /> Remove
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => arrayHelpers.push({ name: '', dosage: '', frequency: '', durationDays: '', instructions: '', quantity: '' })} className="text-blue-600 hover:text-blue-800 flex items-center gap-2 font-medium">
                         <Plus size={18} /> Add Medication
                       </button>
                     </div>
@@ -287,29 +235,15 @@ export const PrescriptionForm = () => {
               {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <Field
-                  as="textarea"
-                  name="notes"
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter additional notes for the prescription"
-                />
+                <Field as="textarea" name="notes" rows={3} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter additional notes" />
               </div>
 
-              {/* Form Actions */}
+              {/* Buttons */}
               <div className="flex gap-4 border-t pt-6">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50"
-                >
+                <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50">
                   {isSubmitting ? 'Saving...' : 'Save Prescription'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/prescriptions')}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition"
-                >
+                <button type="button" onClick={() => navigate('/prescriptions')} className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition">
                   Cancel
                 </button>
               </div>
