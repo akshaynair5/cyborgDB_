@@ -172,6 +172,8 @@ const calculatePercentageChange = (current, previous) => {
   return ((current - previous) / previous * 100).toFixed(1);
 };
 
+
+
 // ============================================================================
 // SUBCOMPONENTS (Defined OUTSIDE Dashboard)
 // ============================================================================
@@ -1030,7 +1032,7 @@ export const Dashboard = () => {
               key={`flagged-${i}`}
               type="critical"
               title="Flagged Lab Result"
-              message={`Patient: ${lab.patient || 'Unknown'} - Requires immediate attention`}
+              message={`Patient: ${lab.patient?.firstName || ''} ${lab.patient?.lastName || ''} - Requires immediate attention`}
               time={formatDateTime(lab.reportedAt)}
               onClick={() => navigate(`/lab-results/${lab._id}`)}
             />
@@ -1041,18 +1043,12 @@ export const Dashboard = () => {
               key={`pending-${i}`}
               type="warning"
               title="Pending Lab Result"
-              message={`Patient: ${lab.patient || 'Unknown'} - Awaiting results`}
+              message={`Patient: ${lab.patient?.firstName || ''} ${lab.patient?.lastName || ''} - Awaiting results`}
               time={formatDateTime(lab.collectedAt)}
               onClick={() => navigate(`/lab-results/${lab._id}`)}
             />
           ))}
 
-          {(!alerts?.flaggedRecent?.length && !alerts?.pendingRecent?.length) && (
-            <div className="col-span-full text-center py-8 text-gray-400">
-              <CheckCircle size={40} className="mx-auto mb-2 text-green-400" />
-              <p className="text-sm">All clear! No pending alerts.</p>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1103,23 +1099,17 @@ export const Dashboard = () => {
           </div>
 
           <div className="divide-y divide-gray-100">
-            {recentItems.admissions.length > 0 ? (
-              recentItems.admissions.slice(0, 5).map((admission) => (
-                <RecentItemCard
-                  key={admission._id}
-                  title={admission.patient?.name || `Ward ${admission.ward || 'N/A'}`}
-                  subtitle={`Room ${admission.room || 'N/A'} • Bed ${admission.bed || 'N/A'}`}
-                  meta={formatDate(admission.admittedAt)}
-                  status={admission.status}
-                  onClick={() => navigate(`/admissions/${admission._id}`)}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Bed size={40} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No recent admissions</p>
-              </div>
-            )}
+            {recentItems.admissions.slice(0, 5).map((admission) => (
+              <RecentItemCard
+                key={admission._id}
+                title={`${admission.patient?.firstName || ''} ${admission.patient?.lastName || ''}`}
+                subtitle={`Ward ${admission.ward?.name || 'N/A'} • Room ${admission.room?.number || 'N/A'} • Bed ${admission.bed?.number || 'N/A'}`}
+                meta={formatDate(admission.admittedAt)}
+                status={admission.status}
+                onClick={() => navigate(`/admissions/${admission._id}`)}
+              />
+            ))}
+
           </div>
         </div>
       </div>
@@ -1139,23 +1129,17 @@ export const Dashboard = () => {
           </div>
 
           <div className="divide-y divide-gray-100">
-            {recentItems.encounters?.length > 0 ? (
-              recentItems.encounters.slice(0, 5).map((encounter) => (
-                <RecentItemCard
-                  key={encounter._id}
-                  title={encounter.patient?.name || 'Unknown Patient'}
-                  subtitle={`${encounter.type || 'Consultation'} • Dr. ${encounter.provider?.name || 'Unknown'}`}
-                  meta={formatDate(encounter.date)}
-                  status={encounter.status}
-                  onClick={() => navigate(`/encounters/${encounter._id}/edit`)}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Stethoscope size={40} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No recent encounters</p>
-              </div>
-            )}
+            {recentItems.encounters.slice(0, 5).map((encounter) => (
+              <RecentItemCard
+                key={encounter._id}
+                title={`${encounter.patient?.firstName || ''} ${encounter.patient?.lastName || ''}`}
+                subtitle={`${encounter.type || 'Consultation'} • Dr. ${encounter.provider?.firstName || ''} ${encounter.provider?.lastName || ''}`}
+                meta={formatDate(encounter.date)}
+                status={encounter.status}
+                onClick={() => navigate(`/encounters/${encounter._id}/edit`)}
+              />
+            ))}
+
           </div>
         </div>
 
@@ -1172,23 +1156,17 @@ export const Dashboard = () => {
           </div>
 
           <div className="divide-y divide-gray-100">
-            {recentItems.labResults?.length > 0 ? (
-              recentItems.labResults.slice(0, 5).map((lab) => (
-                <RecentItemCard
-                  key={lab._id}
-                  title={lab.testName || 'Lab Test'}
-                  subtitle={`Patient: ${lab.patient?.name || 'Unknown'}`}
-                  meta={formatDate(lab.reportedAt || lab.collectedAt)}
-                  status={lab.status}
-                  onClick={() => navigate(`/lab-results/${lab._id}/edit`)}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <TestTube size={40} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No recent lab results</p>
-              </div>
-            )}
+            {recentItems.labResults.slice(0, 5).map((lab) => (
+              <RecentItemCard
+                key={lab._id}
+                title={lab.testName || 'Lab Test'}
+                subtitle={`Patient: ${lab.patient?.firstName || ''} ${lab.patient?.lastName || ''}`}
+                meta={formatDate(lab.reportedAt || lab.collectedAt)}
+                status={lab.status}
+                onClick={() => navigate(`/lab-results/${lab._id}/edit`)}
+              />
+            ))}
+
           </div>
         </div>
       </div>

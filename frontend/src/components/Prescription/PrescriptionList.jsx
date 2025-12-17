@@ -1,21 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useApp } from '../../context/AppContext';
 
 export const PrescriptionList = () => {
   const navigate = useNavigate();
-  const { user } = useApp();
 
   const [rows, setRows] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-
-  const [selectedPrescription, setSelectedPrescription] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchPrescriptions();
@@ -24,46 +19,28 @@ export const PrescriptionList = () => {
   useEffect(() => {
     const q = search.toLowerCase();
 
-    setFiltered(
-      q
-        ? rows.filter((r) => {
-            const patientName = `${r.patient?.firstName || ''} ${r.patient?.lastName || ''}`.toLowerCase();
-            const mrn = r.patient?.hospitalId?.toLowerCase() || '';
-            const medicine = r.medicineName.toLowerCase();
+    const result = rows.filter((p) => {
+      return (
+        q === '' ||
+        p.patientName?.toLowerCase().includes(q) ||
+        p.medication?.toLowerCase().includes(q)
+      );
+    });
 
-            return (
-              patientName.includes(q) ||
-              mrn.includes(q) ||
-              medicine.includes(q)
-            );
-          })
-        : rows
-    );
+    setFiltered(result);
   }, [search, rows]);
 
   const fetchPrescriptions = async () => {
     try {
       const res = await api.getPrescriptions();
 
-      const flattened = res.data.message.prescriptions.flatMap((p) =>
-        p.items.map((item) => ({
-          prescriptionId: p._id,
-          patient: p.patient,
-          prescribedBy: p.prescribedBy,
-          notes: p.notes,
-          createdAt: p.createdAt,
-          fullPrescription: p,
+      const list =
+        res?.data?.message?.prescriptions ||
+        res?.data?.prescriptions ||
+        [];
 
-          medicineName: item.name,
-          dosage: item.dosage,
-          frequency: item.frequency,
-          durationDays: item.durationDays,
-          instructions: item.instructions,
-          quantity: item.quantity
-        }))
-      );
-
-      setRows(flattened);
+      setRows(list);
+      setFiltered(list);
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch prescriptions');
@@ -82,16 +59,6 @@ export const PrescriptionList = () => {
     } catch {
       toast.error('Delete failed');
     }
-  };
-
-  const openModal = (prescription) => {
-    setSelectedPrescription(prescription);
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedPrescription(null);
   };
 
   if (loading) {
@@ -115,12 +82,13 @@ export const PrescriptionList = () => {
       {/* Search */}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="relative">
-          <Search className="absolute left-3 top-3 text-gray-400" />
+          <Search className="absolute left-3 top-3 text-gray-400" size={20} />
           <input
+            type="text"
+            placeholder="Search by patient or medication..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by patient, MRN or medicine..."
-            className="pl-10 w-full py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="pl-10 w-full py-2 border rounded-lg"
           />
         </div>
       </div>
@@ -131,7 +99,7 @@ export const PrescriptionList = () => {
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold">Medicine</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Medication</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Dosage</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Frequency</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Date</th>
@@ -141,45 +109,44 @@ export const PrescriptionList = () => {
 
           <tbody>
             {filtered.length > 0 ? (
-              filtered.map((r, i) => (
-                <tr key={i} className="border-b hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium">
-                    {r.patient
-                      ? `${r.patient.firstName} ${r.patient.lastName}`
-                      : 'N/A'}
+              filtered.map((p) => (
+                <tr key={p._id} className="border-b hover:bg-gray-50">
+                  <td className="px-6 py-4">{p.patientName || 'Unknown'}</td>
+                  <td className="px-6 py-4">{p.medication || '-'}</td>
+                  <td className="px-6 py-4">{p.dosage || '-'}</td>
+                  <td className="px-6 py-4">{p.frequency || '-'}</td>
+                  <td className="px-6 py-4">
+                    {p.createdAt
+                      ? new Date(p.createdAt).toLocaleDateString()
+                      : '-'}
                   </td>
-
-                  <td className="px-6 py-4">{r.medicineName}</td>
-                  <td className="px-6 py-4 text-gray-500">{r.dosage}</td>
-                  <td className="px-6 py-4 text-gray-500">{r.frequency}</td>
-                  <td className="px-6 py-4 text-gray-500">
-                    {new Date(r.createdAt).toLocaleDateString()}
-                  </td>
-
-                  <td className="px-6 py-4 flex gap-3">
-                    <button onClick={() => openModal(r.fullPrescription)} title="View">
-                      <Eye size={18} className="text-blue-600" />
-                    </button>
-
-                    <button
-                      onClick={() => navigate(`/prescriptions/${r.prescriptionId}/edit`)}
-                      title="Edit"
-                    >
-                      <Edit size={18} className="text-green-600" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDelete(r.prescriptionId)}
-                      title="Delete"
-                    >
-                      <Trash2 size={18} className="text-red-600" />
-                    </button>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => navigate(`/prescriptions/${p._id}`)}
+                        className="text-blue-600"
+                      >
+                        <Eye size={18} />
+                      </button>
+                      <button
+                        onClick={() => navigate(`/prescriptions/${p._id}/edit`)}
+                        className="text-green-600"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(p._id)}
+                        className="text-red-600"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="6" className="text-center py-6 text-gray-500">
+                <td colSpan="6" className="px-6 py-6 text-center text-gray-500">
                   No prescriptions found
                 </td>
               </tr>
@@ -187,64 +154,8 @@ export const PrescriptionList = () => {
           </tbody>
         </table>
       </div>
-
-      {/* ================= MODAL ================= */}
-      {isModalOpen && selectedPrescription && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-full max-w-2xl p-6 relative">
-            <button
-              onClick={closeModal}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              <X />
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4">Prescription Details</h2>
-
-            <div className="space-y-2 text-sm">
-              <p>
-                <strong>Patient:</strong>{' '}
-                {selectedPrescription.patient
-                  ? `${selectedPrescription.patient.firstName} ${selectedPrescription.patient.lastName})`
-                  : 'N/A'}
-              </p>
-
-              <p>
-                <strong>Prescribed By:</strong>{' '}
-                {selectedPrescription.prescribedBy
-                  ? `${selectedPrescription.prescribedBy.firstName} ${selectedPrescription.prescribedBy.lastName}`
-                  : 'N/A'}
-              </p>
-
-              <p>
-                <strong>Date:</strong>{' '}
-                {new Date(selectedPrescription.createdAt).toLocaleString()}
-              </p>
-
-              {selectedPrescription.notes && (
-                <p><strong>Notes:</strong> {selectedPrescription.notes}</p>
-              )}
-            </div>
-
-            <hr className="my-4" />
-
-            <h3 className="font-semibold mb-2">Medicines</h3>
-
-            <div className="space-y-3">
-              {selectedPrescription.items.map((item, idx) => (
-                <div key={idx} className="border rounded-lg p-3 bg-gray-50">
-                  <p><strong>Name:</strong> {item.name}</p>
-                  <p><strong>Dosage:</strong> {item.dosage}</p>
-                  <p><strong>Frequency:</strong> {item.frequency}</p>
-                  <p><strong>Duration:</strong> {item.durationDays} days</p>
-                  <p><strong>Quantity:</strong> {item.quantity}</p>
-                  <p><strong>Instructions:</strong> {item.instructions}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+
+export default PrescriptionList;
