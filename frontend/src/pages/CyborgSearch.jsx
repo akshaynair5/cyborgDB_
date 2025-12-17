@@ -1,16 +1,28 @@
 import React, { useState } from 'react';
-import api from '../services/api';
 import toast from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
-import {useNavigate} from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 export const CyborgSearch = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
+  const [synthesis, setSynthesis] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { user } = useApp();
   const [activeItem, setActiveItem] = useState(null);
+  const [scope, setScope] = useState('global');
+  
+  // HARDCODED DEMO ID (This represents "My Hospital")
+  const MY_HOSPITAL_ID = "CITY_GEN_01"; 
+  
+  const { user } = useApp();
   const navigate = useNavigate();
+
+  // Helper to safely render text (prevents "Object" crash)
+  const safeRender = (value) => {
+    if (!value) return "N/A";
+    if (typeof value === 'object') return JSON.stringify(value); 
+    return String(value);
+  };
 
   const doSearch = async () => {
     if (!query || query.trim().length === 0) {
@@ -18,128 +30,231 @@ export const CyborgSearch = () => {
       return;
     }
     setLoading(true);
+    setResults(null);
+    setSynthesis(null);
+
     try {
-      const payload = { query, hospital_ids: user?.hospital ? [user.hospital] : [], top_k: 50 };
-      const res = await api.cyborgSearch(payload);
-      const body = res?.data?.data?.results || res?.data?.results || res?.data || res;
-      setResults(body);
+      const response = await fetch("http://localhost:7000/search-advanced", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+            query: query,
+            scope: scope,               
+            hospital_id: MY_HOSPITAL_ID 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setResults(data.matches || []);
+      setSynthesis(data.synthesis || null);
+
     } catch (err) {
-      console.error('Cyborg search failed', err?.response?.data || err.message);
-      toast.error(err?.response?.data?.message || 'Search failed');
+      console.error('Cyborg search failed', err);
+      toast.error('Search failed. Is app_secure.py running?');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Natural Language Search</h1>
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
+          <span className="text-3xl">🛡️</span>
+          <span className="text-blue-900">MedSec</span> 
+          <span className="text-blue-600 font-light">Neural Search</span>
+      </h1>
 
-      <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask anything about patients, encounters, labs, imaging..."
-          className="flex-1 px-4 py-2 border rounded-lg"
-        />
-        <button
-          onClick={doSearch}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-        >
-          {loading ? 'Searching...' : 'Search'}
-        </button>
+      {/* SEARCH CONTROLS */}
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 mb-6">
+        
+        {/* Scope Toggle */}
+        <div className="flex items-center gap-6 mb-4 text-sm font-medium text-gray-700 bg-gray-50 p-3 rounded-lg inline-block">
+          <span className="text-gray-500 uppercase text-xs font-bold tracking-wider">Search Scope:</span>
+          
+          <label className="flex items-center gap-2 cursor-pointer hover:text-blue-700 transition-colors">
+            <input 
+              type="radio" 
+              name="scope" 
+              value="global" 
+              checked={scope === 'global'}
+              onChange={() => setScope('global')}
+              className="text-blue-600 focus:ring-blue-500"
+            />
+            Global (Consortium)
+          </label>
+          
+          <label className="flex items-center gap-2 cursor-pointer hover:text-blue-700 transition-colors">
+            <input 
+              type="radio" 
+              name="scope" 
+              value="local" 
+              checked={scope === 'local'}
+              onChange={() => setScope('local')}
+              className="text-blue-600 focus:ring-blue-500"
+            />
+            Local Only (My Hospital)
+          </label>
+        </div>
+
+        {/* Input Field */}
+        <div className="flex gap-2 w-full">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+            placeholder="e.g., 'patient with severe chest pain'..."
+            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-lg w-full"
+          />
+          <button
+            onClick={doSearch}
+            disabled={loading}
+            className="px-8 py-3 bg-blue-700 hover:bg-blue-800 text-white font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+          >
+            {loading ? 'Analyzing...' : 'Search'}
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg p-4">
-        {!results && (
-          <p className="text-gray-500">No results yet. Try a natural language query above.</p>
-        )}
-
-        {results && Array.isArray(results) && (
-          <div>
-            <h3 className="text-lg font-medium mb-3">Results ({results.length})</h3>
-            <ul className="space-y-2">
-              {results.map((r, i) => {
-                // flexible shapes: try common fields
-                const id = r.encounter_id || r.id || r._id || `item-${i}`;
-                const title = r.title || r.summary || r.snippet || `Match ${i + 1}`;
-                const hosp = r.hospital_id || r.hospital || r.hospitalId || null;
-                const score = r.score || r.similarity || (r.meta && r.meta.score) || null;
-                const sameHospital = user && hosp && String(user.hospital) === String(hosp);
-
-                return (
-                  <li key={id} className="p-3 border rounded hover:shadow cursor-pointer">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-semibold text-gray-800">{title}</div>
-                        <div className="text-xs text-gray-500 mt-1">Hospital: {hosp || 'unknown'} {sameHospital && <span className="text-green-600 font-medium">(local)</span>}</div>
-                        {score && <div className="text-xs text-gray-500">Score: {Number(score).toFixed(3)}</div>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setActiveItem({ data: r, sameHospital })}
-                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
-                        >
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-
-        {results && !Array.isArray(results) && (
-          <div>
-            <h3 className="text-lg font-medium mb-3">Results</h3>
-            <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 rounded">
-              {JSON.stringify(results, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
-
-      {/* Modal for showing full encounter or redacted summary */}
-      {activeItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg w-full max-w-4xl p-6 max-h-[90vh] overflow-auto">
-            <div className="flex items-start justify-between">
-              <h2 className="text-xl font-semibold">{activeItem.data.title || activeItem.data.summary || 'Result Detail'}</h2>
-              <button onClick={() => setActiveItem(null)} className="text-gray-500">Close</button>
+      {/* AI SYNTHESIS SECTION */}
+      {synthesis && (
+        <div className="mb-8 bg-gradient-to-r from-slate-50 to-blue-50 border border-blue-100 rounded-xl p-6 shadow-sm">
+          <h3 className="text-lg font-bold text-blue-900 mb-4 flex items-center gap-2">
+            <span>🧠</span> MedSec AI Analysis
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+              <h4 className="font-bold text-blue-800 text-xs mb-2 uppercase tracking-wide">Clinical Insights</h4>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                  {safeRender(synthesis.clinical_insights)}
+              </p>
             </div>
+            
+            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+              <h4 className="font-bold text-green-700 text-xs mb-2 uppercase tracking-wide">Outcomes & Management</h4>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                  {safeRender(synthesis.management_outcomes)}
+              </p>
+            </div>
+          </div>
 
-            <div className="mt-4">
-                {activeItem.sameHospital ? (
-                  <StructuredEncounterView
-                    data={activeItem.data}
-                    onOpenPatient={(patientId) => {
-                      setActiveItem(null);
-                      if (patientId) navigate(`/patients/${patientId}`);
-                    }}
-                    onOpenEncounter={(encId) => {
-                      setActiveItem(null);
-                      if (encId) navigate(`/encounters/${encId}`);
-                    }}
-                  />
-                ) : (
-                  <div>
-                    <h3 className="text-sm text-gray-600 mb-2">Redacted Summary (different hospital)</h3>
-                    <div className="text-sm text-gray-700 mb-3">
-                      {activeItem.data.summary || activeItem.data.snippet || 'No summary available.'}
-                    </div>
-                    <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 rounded">
-                      {JSON.stringify({
-                        encounter_id: activeItem.data.encounter_id || activeItem.data.id || activeItem.data._id,
-                        hospital_id: activeItem.data.hospital_id || activeItem.data.hospital,
-                        score: activeItem.data.score || activeItem.data.similarity
-                      }, null, 2)}
-                    </pre>
+          <div className="bg-white p-4 rounded-lg border border-purple-100 shadow-sm border-l-4 border-l-purple-500">
+             <h4 className="font-bold text-purple-700 text-xs mb-2 uppercase tracking-wide">Suggested Next Steps</h4>
+             <p className="text-gray-700 text-sm">{safeRender(synthesis.suggested_next_steps)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* RESULTS LIST */}
+      <div className="space-y-4">
+        {loading && <div className="text-center py-10 text-gray-400 animate-pulse">Running Encrypted Vector Search...</div>}
+        
+        {!loading && results && results.length === 0 && (
+            <p className="text-gray-500 text-center py-8">No matching records found.</p>
+        )}
+
+        {results && results.map((r, i) => {
+          const enc = r.encounter || {};
+          const isLocal = r.hospital_id === MY_HOSPITAL_ID;
+
+          return (
+            <div key={r.encounter_id || i} className="bg-white p-5 rounded-lg border border-gray-200 hover:border-blue-300 transition-all shadow-sm hover:shadow-md group">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${isLocal ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                        {isLocal ? `LOCAL (${r.hospital_id})` : `EXTERNAL (${r.hospital_id})`}
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">ID: {r.encounter_id}</span>
+                    <span className="text-xs text-gray-400">Score: {Number(r.score).toFixed(4)}</span>
                   </div>
-                )}
+                  
+                  <h3 className="text-xl font-semibold text-gray-900 mb-1">{safeRender(enc.diagnosis)}</h3>
+                  <p className="text-gray-600 text-sm mt-1"><strong>Complaint:</strong> {safeRender(enc.chief_complaint)}</p>
+                </div>
+                
+                <button
+                  onClick={() => setActiveItem({ data: r, sameHospital: isLocal })}
+                  className={`px-4 py-2 text-sm rounded-md font-medium transition-colors ${
+                      isLocal 
+                      ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200" 
+                      : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+                  }`}
+                >
+                  {isLocal ? "View Details" : "View Redacted Summary"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* MODAL */}
+      {activeItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className={`p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10 ${activeItem.sameHospital ? 'border-blue-100' : 'border-amber-100 bg-amber-50'}`}>
+              <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                      {activeItem.sameHospital ? "Full Encounter Details" : "Confidential Clinical Snapshot"}
+                  </h2>
+                  {!activeItem.sameHospital && <span className="text-xs text-amber-700 font-bold uppercase tracking-wide">⚠ PII Redacted for Privacy</span>}
+              </div>
+              <button onClick={() => setActiveItem(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+            
+            <div className="p-6">
+               {activeItem.sameHospital ? (
+                   // --- FULL VIEW (Local) ---
+                   <StructuredEncounterView data={activeItem.data.encounter} />
+               ) : (
+                   // --- IMPROVED REDACTED VIEW (External) ---
+                   <div className="space-y-6">
+                       {/* Warning Banner */}
+                       <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 text-sm flex items-start gap-3">
+                           <span className="text-xl">🔒</span>
+                           <div>
+                               <strong>Privacy Mode Active:</strong> Patient identity (Name, MRN, DOB) has been stripped.
+                               <br/>
+                               <span className="opacity-80">Displaying anonymized clinical context for research utility.</span>
+                           </div>
+                       </div>
+
+                       {/* Clinical Cards */}
+                       <div className="grid grid-cols-1 gap-4">
+                           {/* Diagnosis Card */}
+                           <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Diagnosis (Anonymized)</h4>
+                               <p className="text-lg font-semibold text-gray-900">{safeRender(activeItem.data.encounter.diagnosis)}</p>
+                           </div>
+
+                           {/* Treatment & Outcome Grid */}
+                           <div className="grid grid-cols-2 gap-4">
+                               <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg">
+                                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Treatment Used</h4>
+                                   <p className="text-slate-800 font-medium">{safeRender(activeItem.data.encounter.treatment)}</p>
+                               </div>
+                               <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg">
+                                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Clinical Outcome</h4>
+                                   <p className="text-slate-800 font-medium">{safeRender(activeItem.data.encounter.outcome)}</p>
+                               </div>
+                           </div>
+
+                           {/* Context */}
+                           <div className="p-4 bg-white border border-gray-200 rounded-lg">
+                               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Presenting Complaint</h4>
+                               <p className="text-gray-700 italic">"{safeRender(activeItem.data.encounter.chief_complaint)}"</p>
+                           </div>
+                       </div>
+                   </div>
+               )}
             </div>
           </div>
         </div>
@@ -150,92 +265,39 @@ export const CyborgSearch = () => {
 
 export default CyborgSearch;
 
-// ------------------------------
-// StructuredEncounterView helper
-// ------------------------------
-function StructuredEncounterView({ data = {}, onOpenPatient, onOpenEncounter }) {
-  // tolerant extraction of common fields
-  const encounterId = data.encounter_id || data.id || data._id || null;
-  const patientId = data.patient_id || data.patient || (data.patientInfo && (data.patientInfo.id || data.patientInfo._id)) || null;
-  const patientName = data.patient_name || (data.patientInfo && (data.patientInfo.name || `${data.patientInfo.firstName || ''} ${data.patientInfo.lastName || ''}`)) || null;
-  const date = data.encounter_date || data.date || data.timestamp || data.created_at || null;
-  const diagnoses = data.diagnoses || data.diagnoses_found || data.dx || [];
-  const medications = data.medications || data.meds || data.prescriptions || [];
-  const labs = data.labs || data.lab_results || data.tests || [];
-  const imaging = data.imaging || data.imaging_reports || [];
-  const summary = data.summary || data.snippet || data.excerpt || '';
-
+// Helper Component for Full Data (Local)
+function StructuredEncounterView({ data }) {
+  if (!data) return <div>No Data</div>;
+  
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-lg font-semibold">{patientName || (patientId ? `Patient ${patientId}` : 'Unknown Patient')}</div>
-          <div className="text-sm text-gray-500">Encounter: {encounterId || '—'} • Date: {date ? String(date) : 'unknown'}</div>
-        </div>
-        <div className="flex items-center gap-2">
-          {patientId && (
-            <button onClick={() => onOpenPatient(patientId)} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Open Patient</button>
-          )}
-          {encounterId && (
-            <button onClick={() => onOpenEncounter(encounterId)} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Open Encounter</button>
-          )}
-        </div>
+    <div className="space-y-4 text-sm">
+      <div className="grid grid-cols-2 gap-4">
+         <div className="p-3 bg-blue-50/50 rounded border border-blue-100">
+            <span className="block text-xs font-bold text-blue-500 uppercase">Date</span>
+            {String(data.encounter_date || "N/A")}
+         </div>
+         <div className="p-3 bg-green-50/50 rounded border border-green-100">
+            <span className="block text-xs font-bold text-green-600 uppercase">Outcome</span>
+            {String(data.outcome || "N/A")}
+         </div>
       </div>
 
-      {summary && (
-        <div>
-          <h4 className="text-sm font-medium text-gray-700">Summary</h4>
-          <div className="text-sm text-gray-800 bg-gray-50 p-3 rounded mt-1">{summary}</div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <h5 className="text-sm font-medium text-gray-700">Diagnoses</h5>
-          {Array.isArray(diagnoses) && diagnoses.length > 0 ? (
-            <ul className="text-sm mt-2 space-y-1">
-              {diagnoses.map((dx, i) => (
-                <li key={i} className="text-gray-700">{typeof dx === 'string' ? dx : (dx.description || dx.name || dx.code || JSON.stringify(dx))}</li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-sm text-gray-500 mt-1">No diagnoses</div>
-          )}
-        </div>
-
-        <div>
-          <h5 className="text-sm font-medium text-gray-700">Medications</h5>
-          {Array.isArray(medications) && medications.length > 0 ? (
-            <ul className="text-sm mt-2 space-y-1">
-              {medications.map((m, i) => (
-                <li key={i} className="text-gray-700">{typeof m === 'string' ? m : (m.name || m.drug || JSON.stringify(m))}</li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-sm text-gray-500 mt-1">No meds</div>
-          )}
-        </div>
-
-        <div>
-          <h5 className="text-sm font-medium text-gray-700">Labs / Imaging</h5>
-          {((Array.isArray(labs) && labs.length > 0) || (Array.isArray(imaging) && imaging.length > 0)) ? (
-            <div className="text-sm mt-2 space-y-1 text-gray-700">
-              {Array.isArray(labs) && labs.map((t, i) => (
-                <div key={`lab-${i}`}>{typeof t === 'string' ? t : (t.testName || t.name || JSON.stringify(t))}</div>
-              ))}
-              {Array.isArray(imaging) && imaging.map((img, i) => (
-                <div key={`img-${i}`}>{typeof img === 'string' ? img : (img.modality || img.report || JSON.stringify(img))}</div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500 mt-1">No labs or imaging</div>
-          )}
-        </div>
+      <div className="grid grid-cols-2 gap-4">
+         <div className="p-3 bg-gray-50 rounded border border-gray-100">
+            <span className="block text-xs font-bold text-gray-500 uppercase">Treatment</span>
+            {String(data.treatment || "N/A")}
+         </div>
+         <div className="p-3 bg-gray-50 rounded border border-gray-100">
+            <span className="block text-xs font-bold text-gray-500 uppercase">Complaint</span>
+            {String(data.chief_complaint || "N/A")}
+         </div>
       </div>
-
-      <div>
-        <h5 className="text-sm font-medium text-gray-700">Raw Data</h5>
-        <pre className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 rounded mt-1 max-h-48 overflow-auto">{JSON.stringify(data, null, 2)}</pre>
+      
+      <div className="p-3 bg-slate-50 rounded border border-slate-200">
+        <span className="block text-xs font-bold text-slate-500 uppercase mb-2">Raw FHIR Payload</span>
+        <pre className="whitespace-pre-wrap text-xs text-slate-600 font-mono overflow-x-auto bg-white p-2 rounded border border-slate-100">
+          {JSON.stringify(data, null, 2)}
+        </pre>
       </div>
     </div>
   );
