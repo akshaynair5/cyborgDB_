@@ -154,7 +154,7 @@ class APIClient {
   dischargePatient(id, data) {
     return this.client.post(`/admissions/${id}/discharge`, data);
   }
-
+  
   /* --------------------------------------------------------------------------
    * ENCOUNTERS
    * Backend:

@@ -4,6 +4,9 @@ import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
 
+/* =====================================================
+   COMPONENT
+===================================================== */
 export const LabResultList = () => {
   const navigate = useNavigate();
 
@@ -16,10 +19,68 @@ export const LabResultList = () => {
   const [selectedTest, setSelectedTest] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  /* =====================================================
+     NORMALIZER (API → UI SHAPE)
+  ===================================================== */
+  const normalizeLabs = (rows = []) =>
+    rows.map((r) => {
+      const nameParts = (r.patientName || '').split(' ');
+
+      return {
+        _id: r._id,
+
+        patient: {
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+        },
+
+        status: 'completed',
+        collectedAt: r.createdAt,
+        reportedAt: r.createdAt,
+
+        tests: [
+          {
+            testName: r.testName || '-',
+            value: r.resultValue || '-',
+            units: '',
+            referenceRange: '',
+            flagged: false,
+          },
+        ],
+      };
+    });
+
+  /* =====================================================
+     FETCH
+  ===================================================== */
+  const fetchLabs = async () => {
+    try {
+      const res = await api.getLabResults();
+      console.log('Lab results fetched:', res?.data);
+
+      const raw =
+        res?.data?.labResults ||
+        res?.data?.message?.labResults ||
+        [];
+
+      const normalized = normalizeLabs(raw);
+      setLabs(normalized);
+      setFiltered(normalized);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to fetch lab results');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchLabs();
   }, []);
 
+  /* =====================================================
+     SEARCH
+  ===================================================== */
   useEffect(() => {
     const q = search.toLowerCase();
 
@@ -30,9 +91,11 @@ export const LabResultList = () => {
 
     setFiltered(
       labs.filter((lab) => {
-        const patientName = `${lab.patient?.firstName || ''} ${lab.patient?.lastName || ''}`.toLowerCase();
-        const hasMatchingTest = lab.tests?.some(t =>
-          t.testName?.toLowerCase().includes(q)
+        const patientName =
+          `${lab.patient.firstName} ${lab.patient.lastName}`.toLowerCase();
+
+        const hasMatchingTest = lab.tests.some((t) =>
+          t.testName.toLowerCase().includes(q)
         );
 
         return patientName.includes(q) || hasMatchingTest;
@@ -40,18 +103,9 @@ export const LabResultList = () => {
     );
   }, [search, labs]);
 
-  const fetchLabs = async () => {
-    try {
-      const res = await api.getLabResults();
-      setLabs(res.data.message.labs || []);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to fetch lab results');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  /* =====================================================
+     ACTIONS
+  ===================================================== */
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this lab record?')) return;
 
@@ -76,6 +130,9 @@ export const LabResultList = () => {
     setIsModalOpen(false);
   };
 
+  /* =====================================================
+     RENDER
+  ===================================================== */
   if (loading) {
     return <div className="text-center py-10 text-lg">Loading...</div>;
   }
@@ -127,22 +184,15 @@ export const LabResultList = () => {
                 lab.tests.map((test, idx) => (
                   <tr key={`${lab._id}-${idx}`} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium">
-                      {lab.patient
+                      {lab.patient.firstName
                         ? `${lab.patient.firstName} ${lab.patient.lastName}`
                         : 'N/A'}
                     </td>
 
-                    <td className="px-6 py-4">
-                      {test.testName}
-                      {test.flagged && (
-                        <span className="ml-2 text-xs text-red-600 font-semibold">
-                          ⚠ Abnormal
-                        </span>
-                      )}
-                    </td>
+                    <td className="px-6 py-4">{test.testName}</td>
 
                     <td className="px-6 py-4 text-gray-700">
-                      {test.value} {test.units}
+                      {test.value || '—'}
                     </td>
 
                     <td className="px-6 py-4 capitalize text-gray-500">
@@ -156,10 +206,7 @@ export const LabResultList = () => {
                     </td>
 
                     <td className="px-6 py-4 flex gap-3">
-                      <button
-                        onClick={() => openModal(lab, test)}
-                        title="View"
-                      >
+                      <button onClick={() => openModal(lab, test)} title="View">
                         <Eye size={18} className="text-blue-600" />
                       </button>
 
@@ -207,18 +254,11 @@ export const LabResultList = () => {
             <div className="space-y-2 text-sm">
               <p>
                 <strong>Patient:</strong>{' '}
-                {selectedLab.patient
-                  ? `${selectedLab.patient.firstName} ${selectedLab.patient.lastName}`
-                  : 'N/A'}
+                {`${selectedLab.patient.firstName} ${selectedLab.patient.lastName}`}
               </p>
 
               <p><strong>Test:</strong> {selectedTest.testName}</p>
               <p><strong>Status:</strong> {selectedLab.status}</p>
-
-              <p>
-                <strong>Collected At:</strong>{' '}
-                {new Date(selectedLab.collectedAt).toLocaleString()}
-              </p>
 
               <p>
                 <strong>Reported At:</strong>{' '}
@@ -230,20 +270,8 @@ export const LabResultList = () => {
 
             <div className="space-y-2">
               <p>
-                <strong>Result:</strong>{' '}
-                {selectedTest.value} {selectedTest.units}
+                <strong>Result:</strong> {selectedTest.value}
               </p>
-
-              <p>
-                <strong>Reference Range:</strong>{' '}
-                {selectedTest.referenceRange}
-              </p>
-
-              {selectedTest.flagged && (
-                <p className="text-red-600 font-semibold">
-                  ⚠ This value is outside the normal range
-                </p>
-              )}
             </div>
           </div>
         </div>

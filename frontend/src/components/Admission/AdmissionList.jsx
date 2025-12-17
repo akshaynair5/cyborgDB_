@@ -9,56 +9,91 @@ import {
   Edit,
   LogOut,
   BedDouble,
+  X
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 
 export const AdmissionList = () => {
   const navigate = useNavigate();
   const { user } = useApp();
+
   const [admissions, setAdmissions] = useState([]);
+  const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("active");
 
-  const [filtered, setFiltered] = useState([]);
+  // Discharge state
+  const [showDischargeModal, setShowDischargeModal] = useState(false);
+  const [selectedAdmission, setSelectedAdmission] = useState(null);
+  const [dischargeSummary, setDischargeSummary] = useState("");
 
-  useEffect(() => {
-    loadAdmissions();
-  }, []);
-
-  useEffect(() => {
-    const list = admissions.filter((a) => {
-      const searchMatch =
-        search === "" ||
-        a.patientName.toLowerCase().includes(search.toLowerCase()) ||
-        a.hospitalId?.toLowerCase().includes(search.toLowerCase());
-
-      const filterMatch = filter === "all" || a.status === filter;
-
-      return searchMatch && filterMatch;
-    });
-
-    setFiltered(list);
-  }, [search, filter, admissions]);
-
+  /* =====================================================
+     LOAD
+  ===================================================== */
   const loadAdmissions = async () => {
     try {
       const res = await api.getAdmissions(user?.hospital);
+      console.log("Admissions fetched:", res?.data);
       setAdmissions(res.data.message.admissions || []);
-    } catch (err) {
+    } catch {
       toast.error("Unable to load admissions");
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading)
+  useEffect(() => {
+    loadAdmissions();
+  }, []);
+
+  /* =====================================================
+     FILTER
+  ===================================================== */
+  useEffect(() => {
+    const list = admissions.filter((a) => {
+      const searchMatch =
+        !search ||
+        a.patientName.toLowerCase().includes(search.toLowerCase()) ||
+        a.hospitalId?.toLowerCase().includes(search.toLowerCase());
+
+      const filterMatch = filter === "all" || a.status === filter;
+      return searchMatch && filterMatch;
+    });
+
+    setFiltered(list);
+  }, [search, filter, admissions]);
+
+  /* =====================================================
+     DISCHARGE
+  ===================================================== */
+  const handleDischarge = async () => {
+    try {
+      await api.dischargePatient(selectedAdmission._id, {
+        dischargeSummary,
+      });
+
+      toast.success("Patient discharged successfully");
+      setShowDischargeModal(false);
+      setSelectedAdmission(null);
+      setDischargeSummary("");
+      loadAdmissions();
+    } catch (err) {
+      console.log(err)
+      toast.error(
+        err?.response?.data?.message || "Failed to discharge patient"
+      );
+    }
+  };
+
+  if (loading) {
     return (
       <div className="text-center py-10 text-gray-600 animate-pulse">
         Loading admissions...
       </div>
     );
+  }
 
   return (
     <div className="space-y-8">
@@ -124,10 +159,15 @@ export const AdmissionList = () => {
               filtered.map((a) => (
                 <tr key={a._id} className="border-b hover:bg-gray-50">
                   <td className="px-6 py-4">{a.patientName}</td>
-                  <td className="px-6 py-4 text-gray-600">{a.hospitalId || "-"}</td>
-                  <td className="px-6 py-4">{new Date(a.admittedAt).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 text-gray-600">
+                    {a.hospitalId || "-"}
+                  </td>
+                  <td className="px-6 py-4">
+                    {new Date(a.admittedAt).toLocaleDateString()}
+                  </td>
                   <td className="px-6 py-4">{a.ward || "-"}</td>
                   <td className="px-6 py-4">{a.room || "-"}</td>
+
                   <td className="px-6 py-4">
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-semibold ${
@@ -145,7 +185,7 @@ export const AdmissionList = () => {
                   <td className="px-6 py-4">
                     <div className="flex gap-3">
                       <button
-                        onClick={() => navigate(`/admissions/${a._id}/edit`)}
+                        onClick={() => navigate(`/admissions/${a._id}`)}
                         className="text-blue-600 hover:text-blue-800"
                       >
                         <Eye size={18} />
@@ -154,14 +194,19 @@ export const AdmissionList = () => {
                       {a.status === "active" && (
                         <>
                           <button
-                            onClick={() => navigate(`/admissions/${a._id}/edit`)}
+                            onClick={() =>
+                              navigate(`/admissions/${a._id}/edit`)
+                            }
                             className="text-green-600 hover:text-green-800"
                           >
                             <Edit size={18} />
                           </button>
 
                           <button
-                            onClick={() => navigate(`/admissions/${a._id}/discharge`)}
+                            onClick={() => {
+                              setSelectedAdmission(a);
+                              setShowDischargeModal(true);
+                            }}
                             className="text-orange-600 hover:text-orange-800"
                           >
                             <LogOut size={18} />
@@ -174,10 +219,7 @@ export const AdmissionList = () => {
               ))
             ) : (
               <tr>
-                <td
-                  colSpan="7"
-                  className="text-center py-10 text-gray-500 text-lg"
-                >
+                <td colSpan="7" className="text-center py-10 text-gray-500">
                   No admissions found
                 </td>
               </tr>
@@ -185,6 +227,49 @@ export const AdmissionList = () => {
           </tbody>
         </table>
       </div>
+
+      {/* ================= DISCHARGE MODAL ================= */}
+      {showDischargeModal && selectedAdmission && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-lg p-6 relative">
+            <button
+              onClick={() => setShowDischargeModal(false)}
+              className="absolute top-4 right-4 text-gray-500"
+            >
+              <X />
+            </button>
+
+            <h2 className="text-xl font-bold mb-3">Discharge Patient</h2>
+
+            <p className="text-sm text-gray-600 mb-3">
+              Patient: <strong>{selectedAdmission.patientName}</strong>
+            </p>
+
+            <textarea
+              value={dischargeSummary}
+              onChange={(e) => setDischargeSummary(e.target.value)}
+              placeholder="Discharge summary / instructions..."
+              className="w-full border rounded-lg p-3 h-32 focus:ring-2 focus:ring-blue-500"
+            />
+
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setShowDischargeModal(false)}
+                className="px-4 py-2 rounded-lg border"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleDischarge}
+                className="px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700"
+              >
+                Confirm Discharge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

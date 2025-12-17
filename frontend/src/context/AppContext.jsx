@@ -8,6 +8,10 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPatient, setCurrentPatient] = useState(null);
   const [currentEncounter, setCurrentEncounter] = useState(null);
+  const [currentPrescription, setCurrentPrescription] = useState(null);
+  const [currentAppointment, setCurrentAppointment] = useState(null);
+  const [currentLabTest, setCurrentLabTest] = useState(null);
+  const [currentImagingStudy, setCurrentImagingStudy] = useState(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -46,6 +50,13 @@ export const AppProvider = ({ children }) => {
         setCurrentPatient,
         currentEncounter,
         setCurrentEncounter,
+        currentPrescription,
+        setCurrentPrescription,
+        currentAppointment,
+        setCurrentAppointment,
+        currentLabTest,
+        setCurrentLabTest,
+        currentImagingStudy,
       }}
     >
       {children}

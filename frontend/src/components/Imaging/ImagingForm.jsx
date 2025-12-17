@@ -38,7 +38,7 @@ export const ImagingForm = () => {
   const fetchPatients = async () => {
     try {
       const res = await api.getPatients(user?.hospital || '');
-      const pts = res?.data?.data?.patients || res?.data?.patients || res?.data || [];
+      const pts = res?.data?.message?.patients || res?.data?.patients || res?.data || [];
       setPatients(pts);
     } catch (err) {
       toast.error('Failed to fetch patients');
@@ -49,7 +49,7 @@ export const ImagingForm = () => {
     try {
       const res = await api.getImagingReportById(id);
       // defensive extraction
-      const payload = res?.data?.data?.imagingReport || res?.data?.imagingReport || res?.data || null;
+      const payload = res?.data?.message?.imagingReport || res?.data?.imagingReport || res?.data || null;
       if (payload) setImaging(payload);
     } catch (err) {
       toast.error('Failed to fetch imaging record');
@@ -61,7 +61,7 @@ export const ImagingForm = () => {
   const fetchEncountersForPatient = async (patientId) => {
     try {
       const res = await api.getEncountersForPatient(patientId);
-      const all = res?.data?.data?.encounters || res?.data?.encounters || res?.data || [];
+      const all = res?.data?.message?.encounters || res?.data?.encounters || res?.data || [];
       setEncounters(all);
     } catch (err) {
       setEncounters([]);

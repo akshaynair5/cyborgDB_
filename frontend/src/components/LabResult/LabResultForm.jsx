@@ -49,7 +49,7 @@ export const LabResultForm = () => {
   const fetchPatients = async () => {
     try {
       const res = await api.getPatients(user?.hospital || '');
-      const pts = res?.data?.data?.patients || res?.data?.patients || res?.data || [];
+      const pts = res?.data?.message?.patients || res?.data?.patients || res?.data || [];
       setPatients(pts);
     } catch {
       toast.error('Failed to fetch patients');
@@ -59,7 +59,7 @@ export const LabResultForm = () => {
   const fetchEncountersForPatient = async (patientId) => {
     try {
       const res = await api.getEncountersForPatient(patientId);
-      const list = res?.data?.data?.encounters || res?.data?.encounters || res?.data || [];
+      const list = res?.data?.message?.encounters || res?.data?.encounters || res?.data || [];
       setEncounters(list);
     } catch {
       setEncounters([]);
@@ -186,7 +186,7 @@ export const LabResultForm = () => {
                     className="w-full px-4 py-2 border rounded-lg"
                   >
                     <option value="">Select encounter</option>
-                    {encounters.map(c => (
+                    {encounters.length > 0 && encounters.map(c => (
                       <option key={c._id} value={c._id}>
                         {new Date(c.startedAt).toLocaleString()} — {c.encounterType}
                       </option>

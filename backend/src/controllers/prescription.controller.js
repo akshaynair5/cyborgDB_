@@ -74,6 +74,7 @@ export const getPrescriptionsForPatient = asyncHandler(async (req, res) => {
   })
     .populate("prescribedBy", "firstName lastName")
     .populate("items")
+    .populate("prescribedBy", "firstName lastName")
     .sort({ createdAt: -1 });
 
   return res.status(200).json(

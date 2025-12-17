@@ -17,33 +17,45 @@ export const ImagingList = () => {
   const [selectedImaging, setSelectedImaging] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  useEffect(() => {
-    fetchImaging();
-  }, []);
+  /* =====================================================
+     NORMALIZER (API → UI SHAPE)
+  ===================================================== */
+  const normalizeImaging = (list = []) =>
+    list.map((i) => {
+      const nameParts = (i.patientName || '').split(' ');
+      return {
+        _id: i._id,
 
-  useEffect(() => {
-    const q = search.toLowerCase();
+        patient: {
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+          hospitalId: '',
+        },
 
-    setFiltered(
-      imaging.length && q
-        ? imaging.filter((i) => {
-            const patientName = `${i.patient?.firstName || ''} ${i.patient?.lastName || ''}`.toLowerCase();
-            const mrn = i.patient?.hospitalId?.toLowerCase() || '';
+        modality: i.imagingType || '-',
+        report: i.resultSummary || '',
+        performedAt: i.createdAt,
+        reportedAt: i.createdAt,
 
-            return (
-              patientName.includes(q) ||
-              mrn.includes(q) ||
-              i.modality.toLowerCase().includes(q)
-            );
-          })
-        : imaging
-    );
-  }, [search, imaging]);
+        images: [],
+      };
+    });
 
+  /* =====================================================
+     FETCH
+  ===================================================== */
   const fetchImaging = async () => {
     try {
       const res = await api.getImagingReports();
-      setImaging(res.data.message.imaging || []);
+      console.log('Imaging fetched:', res?.data);
+
+      const raw =
+        res?.data?.imagingReports ||
+        res?.data?.message?.imagingReports ||
+        [];
+
+      const normalized = normalizeImaging(raw);
+      setImaging(normalized);
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch imaging records');
@@ -52,6 +64,34 @@ export const ImagingList = () => {
     }
   };
 
+  useEffect(() => {
+    fetchImaging();
+  }, []);
+
+  /* =====================================================
+     SEARCH
+  ===================================================== */
+  useEffect(() => {
+    const q = search.toLowerCase();
+
+    setFiltered(
+      q
+        ? imaging.filter((i) => {
+            const patientName =
+              `${i.patient?.firstName || ''} ${i.patient?.lastName || ''}`.toLowerCase();
+
+            return (
+              patientName.includes(q) ||
+              (i.modality || '').toLowerCase().includes(q)
+            );
+          })
+        : imaging
+    );
+  }, [search, imaging]);
+
+  /* =====================================================
+     ACTIONS
+  ===================================================== */
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this imaging record?')) return;
 
@@ -59,8 +99,8 @@ export const ImagingList = () => {
       await api.deleteImagingReport(id);
       toast.success('Imaging record deleted');
       fetchImaging();
-    } catch(err) {
-      console.log(err);
+    } catch (err) {
+      console.error(err);
       toast.error('Failed to delete imaging record');
     }
   };
@@ -75,6 +115,9 @@ export const ImagingList = () => {
     setIsModalOpen(false);
   };
 
+  /* =====================================================
+     RENDER
+  ===================================================== */
   if (loading) {
     return <div className="text-center py-10 text-lg">Loading...</div>;
   }
@@ -100,7 +143,7 @@ export const ImagingList = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by patient name, MRN or modality..."
+            placeholder="Search by patient name or modality..."
             className="pl-10 w-full py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -124,7 +167,7 @@ export const ImagingList = () => {
               filtered.map((item) => (
                 <tr key={item._id} className="border-b hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium">
-                    {item.patient
+                    {item.patient.firstName
                       ? `${item.patient.firstName} ${item.patient.lastName}`
                       : 'N/A'}
                   </td>
@@ -136,7 +179,9 @@ export const ImagingList = () => {
                   </td>
 
                   <td className="px-6 py-4 text-gray-500">
-                    {new Date(item.performedAt).toLocaleDateString()}
+                    {item.performedAt
+                      ? new Date(item.performedAt).toLocaleDateString()
+                      : 'N/A'}
                   </td>
 
                   <td className="px-6 py-4 flex gap-3">
@@ -184,14 +229,18 @@ export const ImagingList = () => {
             <div className="space-y-2 text-sm">
               <p>
                 <strong>Patient:</strong>{' '}
-                {selectedImaging.patient
-                  ? `${selectedImaging.patient.firstName} ${selectedImaging.patient.lastName} (${selectedImaging.patient.hospitalId})`
+                {selectedImaging.patient.firstName
+                  ? `${selectedImaging.patient.firstName} ${selectedImaging.patient.lastName}`
                   : 'N/A'}
               </p>
 
               <p><strong>Modality:</strong> {selectedImaging.modality}</p>
-              <p><strong>Performed At:</strong> {new Date(selectedImaging.performedAt).toLocaleString()}</p>
-              <p><strong>Reported At:</strong> {new Date(selectedImaging.reportedAt).toLocaleString()}</p>
+              <p>
+                <strong>Performed At:</strong>{' '}
+                {selectedImaging.performedAt
+                  ? new Date(selectedImaging.performedAt).toLocaleString()
+                  : 'N/A'}
+              </p>
             </div>
 
             <hr className="my-4" />
@@ -202,23 +251,6 @@ export const ImagingList = () => {
                 {selectedImaging.report || 'No report provided.'}
               </p>
             </div>
-
-            {selectedImaging.images?.length > 0 && (
-              <>
-                <hr className="my-4" />
-                <h3 className="font-semibold mb-2">Images</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {selectedImaging.images.map((img, i) => (
-                    <img
-                      key={i}
-                      src={img}
-                      alt="Imaging"
-                      className="rounded border"
-                    />
-                  ))}
-                </div>
-              </>
-            )}
           </div>
         </div>
       )}

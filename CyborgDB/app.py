@@ -16,13 +16,12 @@ import cyborgdb
 import secrets
 from flask_cors import CORS
 import dotenv
+import hashlib
 dotenv.load_dotenv()
 
 # ==================================================
 # CONFIGURATION
 # ==================================================
-
-
 
 # 1. SECURITY: Your Consortium Key
 CONSORTIUM_KEY = b'20siSj50fTPrCndwzj_Da45JlrN4vwDfT3GcsGYlYwQ=' 
@@ -49,15 +48,16 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("medsec-real")
 
+# ==================================================
+# LOAD OR CREATE INDEX
+# ==================================================
 
 try:
-    
     vector_index = vector_client.load_index(INDEX_NAME, index_key=index_key_bytes)
-    print(f"[MedSec] ✅ Connected to existing index: {INDEX_NAME}")
+    logger.info(f"[MedSec] ✅ Connected to existing index: {INDEX_NAME}")
 except Exception:
-    print(f"[MedSec] ⚠️ Index not found. Creating new one...")
+    logger.warning(f"[MedSec] ⚠️ Index not found. Creating new one...")
     try:
-
         config = {
             "ivfflat": {
                 "dimension": 768,
@@ -66,11 +66,9 @@ except Exception:
             }
         }
         vector_index = vector_client.create_index(INDEX_NAME, index_key_bytes, config)
-        print(f"[MedSec] ✅ Successfully created NEW index: {INDEX_NAME}")
-
+        logger.info(f"[MedSec] ✅ Successfully created NEW index: {INDEX_NAME}")
     except Exception as e:
-        print(f"CRITICAL: Index creation failed. Error: {e}")
-   
+        logger.critical(f"Index creation failed. Error: {e}")
         vector_index = vector_client.create_index(INDEX_NAME, index_key_bytes, {"dimension": 768})
 
 # ==================================================
@@ -85,24 +83,57 @@ def decrypt_metadata(token: str) -> dict:
     try:
         json_str = cipher_suite.decrypt(token.encode()).decode()
         return json.loads(json_str)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Metadata decryption failed: {e}")
         return {}
 
 def call_local_llm(prompt, expect_json=False):
     try:
         payload = {"model": LOCAL_MODEL, "prompt": prompt, "stream": False, "format": "json" if expect_json else ""}
-        res = requests.post(OLLAMA_URL, json=payload)
+        res = requests.post(OLLAMA_URL, json=payload, timeout=20)
+        res.raise_for_status()
         text = res.json().get("response", "")
         if expect_json:
             text = text.replace("```json", "").replace("```", "").strip()
             return json.loads(text)
         return text
-    except Exception:
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
         return {} if expect_json else "Error generating insight."
 
 def synthesize_answer(query, encounters):
-    prompt = f"""Doctor asked: "{query}". Similar cases: {json.dumps(encounters)}. Return JSON (summary, clinical_insights, management_outcomes, suggested_next_steps, similar_cases)."""
-    return call_local_llm(prompt, expect_json=True)
+    # Cache synthesis to reduce repeated LLM calls
+    cache_key = f"synthesis:{hashlib.sha256(query.encode()).hexdigest()}"
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+    
+    prompt = (
+        f"Doctor asked: \"{query}\".\n"
+        f"Consider these similar encounters:\n{json.dumps(encounters, indent=2)}\n\n"
+        "Return a JSON with fields: summary, clinical_insights, management_outcomes, suggested_next_steps, similar_cases."
+    )
+    result = call_local_llm(prompt, expect_json=True)
+    
+    if result:
+        redis_client.setex(cache_key, 3600, json.dumps(result))  # cache for 1 hour
+    return result
+
+def embed_query(query: str):
+    """
+    Generate vector embedding for the query using DeepSeek API
+    """
+    try:
+        payload = {"model": LOCAL_MODEL, "prompt": query, "stream": False, "format": "vector"}
+        res = requests.post(OLLAMA_URL, json=payload, timeout=10)
+        res.raise_for_status()
+        vector = res.json().get("response", [0.001]*768)
+        if len(vector) != 768:
+            vector = [0.001]*768
+        return vector
+    except Exception as e:
+        logger.warning(f"Query embedding failed: {e}")
+        return [0.001]*768
 
 # ==================================================
 # ROUTES
@@ -111,55 +142,45 @@ def synthesize_answer(query, encounters):
 @app.route("/search-advanced", methods=["POST"])
 def search():
     try:
-        # Get parameters from Frontend
         data = request.json
         query = data.get("query")
-        scope = data.get("scope", "global")         
-        requester_hospital = data.get("hospital_id") 
-        
+        scope = data.get("scope", "global")
+        requester_hospital = data.get("hospital_id")
 
-        results = vector_index.query([0.001]*768, top_k=20)
-        
+        query_vector = embed_query(query)
+        results = vector_index.query(query_vector, top_k=20)
+
         matches = []
         for r in results:
-            # Decrypt Metadata
             meta = r.get('metadata', {})
             blob = meta.get("secure_blob")
-            decrypted_meta = {}
-            
-            if blob: 
-                decrypted_meta = decrypt_metadata(blob)
-            
-      
+            decrypted_meta = decrypt_metadata(blob) if blob else {}
             record_hospital = decrypted_meta.get("hospital_id")
-            
 
             if scope == "local" and record_hospital != requester_hospital:
                 continue
-            # -------------------------------------------
 
             eid = r['id'].replace("encounter:", "")
             full_data = redis_client.get(f"encounter:{eid}")
-            
-            if full_data: 
+            if full_data:
                 matches.append({
-                    "encounter_id": eid, 
-                    "hospital_id": record_hospital, 
-                    "encounter": json.loads(full_data), 
-                    "score": r.get('score', 0.0)
+                    "encounter_id": eid,
+                    "hospital_id": record_hospital,
+                    "encounter": json.loads(full_data),
+                    "score": float(r.get('score', 0.0))
                 })
-                
-        # Slice to top 5 AFTER filtering
+
         final_matches = matches[:5]
-        
         synthesis = synthesize_answer(query, final_matches)
-        return jsonify({
-            "matches": final_matches, 
-            "synthesis": synthesis
-        })
+        return jsonify({"matches": final_matches, "synthesis": synthesis})
 
     except Exception as e:
         logger.error(str(e))
         return jsonify({"error": str(e)}), 500
+
+# ==================================================
+# RUN SERVER
+# ==================================================
+
 if __name__ == "__main__":
     app.run(port=7000)

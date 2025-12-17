@@ -25,61 +25,67 @@ export const AdmissionForm = () => {
   const [admission, setAdmission] = useState(null);
   const [loading, setLoading] = useState(!!id);
 
+  // Fetch patients and users
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [patientsRes, usersRes] = await Promise.all([
+          api.getPatients(user?.hospital || ''),
+          api.getUsers(user.hospital || ''),
+        ]);
+        setPatients(patientsRes.data.message.patients || []);
+        setUsers(usersRes.data.message.users || []);
+      } catch (error) {
+        toast.error('Failed to fetch data');
+      }
+    };
     fetchData();
-  }, []);
+  }, [user?.hospital]);
 
+  // Fetch admission for edit
   useEffect(() => {
-    if (id) {
-      fetchAdmission();
-    }
-  }, [id]);
+    if (!id) return;
 
-  const fetchData = async () => {
-    try {
-      const [patientsRes, usersRes] = await Promise.all([
-        api.getPatients(user?.hospital || ''),
-        api.getUsers(),
-      ]);
-      setPatients(patientsRes.data);
-      setUsers(usersRes.data);
-    } catch (error) {
-      toast.error('Failed to fetch data');
-    }
-  };
+    const fetchAdmission = async () => {
+      try {
+        const res = await api.getAdmissionById(id);
+        const data = res.data.message.admission;
 
+        setAdmission({
+          encounter: data?.encounter || '',
+          patient: data?.patient?._id || '',
+          admissionReason: data?.admissionReason || '',
+          ward: data?.ward || '',
+          room: data?.room || '',
+          primaryConsultant: data?.primaryConsultant?._id || '',
+          admittedBy: data?.admittedBy?._id || user?._id || '',
+        });
+
+        if (data?.patient?._id) {
+          fetchEncounters(data.patient._id);
+        }
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to fetch admission');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdmission();
+  }, [id, user?._id]);
+
+  // Fetch encounters for a patient
   const fetchEncounters = async (patientId) => {
     if (!patientId) return setEncounters([]);
     try {
       const res = await api.getEncountersForPatient(patientId);
-      // API returns data.message.encounters or data.encounters depending on backend
       const list = res?.data?.message?.encounters || res?.data?.encounters || res?.data || [];
       setEncounters(list);
     } catch (err) {
       console.error(err);
       setEncounters([]);
     }
-  };
-
-  const fetchAdmission = async () => {
-    try {
-      const response = await api.getAdmissionById(id);
-      setAdmission(response.data.message.admissions || []);
-    } catch (error) {
-      toast.error('Failed to fetch admission');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const initialValues = admission || {
-    encounter: '',
-    patient: '',
-    admissionReason: '',
-    ward: '',
-    room: '',
-    primaryConsultant: '',
-    admittedBy: user?._id || '',
   };
 
   const handleSubmit = async (values) => {
@@ -113,24 +119,32 @@ export const AdmissionForm = () => {
         <h1 className="text-2xl font-bold mb-6">{id ? 'Edit' : 'New'} Admission</h1>
 
         <Formik
-          initialValues={initialValues}
+          initialValues={{
+            encounter: admission?.encounter || '',
+            patient: admission?.patient || '',
+            admissionReason: admission?.admissionReason || '',
+            ward: admission?.ward || '',
+            room: admission?.room || '',
+            primaryConsultant: admission?.primaryConsultant || '',
+            admittedBy: admission?.admittedBy || user?._id || '',
+          }}
           validationSchema={admissionSchema}
           onSubmit={handleSubmit}
           enableReinitialize
         >
-          {({ isSubmitting }) => (
+          {({ isSubmitting, values, setFieldValue }) => (
             <Form className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Patient */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Patient</label>
                   <Field name="patient">
-                    {({ field, form }) => (
+                    {({ field }) => (
                       <select
                         {...field}
                         onChange={(e) => {
-                          form.setFieldValue('patient', e.target.value);
-                          // clear encounter when patient changes
-                          form.setFieldValue('encounter', '');
+                          setFieldValue('patient', e.target.value);
+                          setFieldValue('encounter', '');
                           fetchEncounters(e.target.value);
                         }}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -147,27 +161,26 @@ export const AdmissionForm = () => {
                   <ErrorMessage name="patient" component="p" className="text-red-500 text-sm mt-1" />
                 </div>
 
+                {/* Encounter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Link to Encounter (optional)</label>
                   <Field as="select" name="encounter" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">No encounter</option>
                     {encounters.length > 0 && encounters.map((e) => (
                       <option key={e._id} value={e._id}>
-                        {e.reason ? `${e.reason} — ` : ''}{e.startedAt ? new Date(e.startedAt).toLocaleString() : (e.createdAt ? new Date(e.createdAt).toLocaleString() : 'Encounter')}
+                        {e.reason ? `${e.reason} — ` : ''}
+                        {e.startedAt ? new Date(e.startedAt).toLocaleString() : (e.createdAt ? new Date(e.createdAt).toLocaleString() : 'Encounter')}
                       </option>
                     ))}
                   </Field>
                 </div>
 
+                {/* Primary Consultant */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Primary Consultant</label>
-                  <Field
-                    as="select"
-                    name="primaryConsultant"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
+                  <Field as="select" name="primaryConsultant" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Select consultant</option>
-                    {users.length > 0 &&users.map((u) => (
+                    {users.length > 0 && users.map((u) => (
                       <option key={u._id} value={u._id}>
                         Dr. {u.firstName} {u.lastName}
                       </option>
@@ -175,52 +188,32 @@ export const AdmissionForm = () => {
                   </Field>
                 </div>
 
+                {/* Ward */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Ward</label>
-                  <Field
-                    type="text"
-                    name="ward"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter ward"
-                  />
+                  <Field type="text" name="ward" placeholder="Enter ward" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
 
+                {/* Room */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Room</label>
-                  <Field
-                    type="text"
-                    name="room"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter room number"
-                  />
+                  <Field type="text" name="room" placeholder="Enter room number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
 
+                {/* Admission Reason */}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Admission Reason</label>
-                  <Field
-                    as="textarea"
-                    name="admissionReason"
-                    rows={4}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter reason for admission"
-                  />
+                  <Field as="textarea" name="admissionReason" rows={4} placeholder="Enter reason for admission" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   <ErrorMessage name="admissionReason" component="p" className="text-red-500 text-sm mt-1" />
                 </div>
               </div>
 
+              {/* Buttons */}
               <div className="flex gap-4">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50"
-                >
+                <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50">
                   {isSubmitting ? 'Saving...' : 'Save Admission'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/admissions')}
-                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition"
-                >
+                <button type="button" onClick={() => navigate('/admissions')} className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 rounded-lg transition">
                   Cancel
                 </button>
               </div>

@@ -216,7 +216,7 @@ export const EncounterDetail = () => {
             <p className="text-gray-600 text-sm">Patient</p>
             <p className="text-xl font-semibold text-gray-900">{patientName}</p>
             {encounter.patient && (
-              <p className="text-sm text-gray-500">MRN: {encounter.patient.hospitalId}</p>
+              <p className="text-sm text-gray-500">MRN: {encounter.patient._id}</p>
             )}
           </div>
 
@@ -509,7 +509,7 @@ export const EncounterDetail = () => {
                             )}
                             {diag.recordedBy && (
                               <p className="text-xs text-gray-500 mt-2">
-                                Recorded by: {diag.recordedBy.firstName} {diag.recordedBy.lastName}
+                                Recorded by: {encounter.seenBy.firstName} {diag.recordedBy.lastName}
                               </p>
                             )}
                           </div>
@@ -531,9 +531,9 @@ export const EncounterDetail = () => {
                         <p className="font-semibold text-gray-900 mb-2">
                           {rx.items?.[0]?.name || 'Prescription'}
                         </p>
-                        {rx.prescribedBy && (
+                        {encounter.seenBy && (
                           <p className="text-xs text-gray-500 mb-2">
-                            By: {rx.prescribedBy.firstName} {rx.prescribedBy.lastName}
+                            By: {encounter.seenBy.firstName} {encounter.seenBy.lastName}
                           </p>
                         )}
                         {rx.items && rx.items.map((item, idx) => (

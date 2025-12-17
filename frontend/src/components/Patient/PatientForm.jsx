@@ -68,7 +68,7 @@ export const PatientForm = () => {
     try {
       const response = await api.getPatientById(id);
       // Normalize response shape: ApiResponse -> { data: { patient } }
-      const payload = response?.data?.data?.patient || response?.data?.patient || response?.data || null;
+      const payload = response?.data?.message?.patient || response?.data?.patient || response?.data || null;
       if (payload && payload.dob) {
         // Ensure DOB is a yyyy-mm-dd string for date input
         try {

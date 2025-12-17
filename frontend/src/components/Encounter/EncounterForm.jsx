@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Formik, Form, Field, FieldArray, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
@@ -36,6 +36,73 @@ export const EncounterForm = () => {
     }
   }, [id]);
 
+const normalizeEncounterForForm = (encounter, user) => {
+  if (!encounter) return null;
+
+  return {
+    patient: encounter.patient?._id || encounter.patient || '',
+    encounterType: encounter.encounterType || 'outpatient',
+    seenBy: encounter.seenBy?._id || encounter.seenBy || user?._id || '',
+    chiefComplaint: encounter.chiefComplaint || '',
+    historyOfPresentIllness: encounter.historyOfPresentIllness || '',
+    examination: encounter.examination || '',
+    vitals: {
+      temperatureC: encounter.vitals?.temperatureC ?? '',
+      pulse: encounter.vitals?.pulse ?? '',
+      respiratoryRate: encounter.vitals?.respiratoryRate ?? '',
+      systolicBP: encounter.vitals?.systolicBP ?? '',
+      diastolicBP: encounter.vitals?.diastolicBP ?? '',
+      spo2: encounter.vitals?.spo2 ?? '',
+      weightKg: encounter.vitals?.weightKg ?? '',
+      heightCm: encounter.vitals?.heightCm ?? '',
+    },
+    diagnoses: (encounter.diagnoses || []).map(d => ({
+      code: d.code || '',
+      description: d.description || '',
+      isPrimary: !!d.isPrimary,
+    })),
+    prescriptions: (encounter.prescriptions || []).flatMap(p =>
+      (p.items || []).map(i => ({
+        name: i.name || '',
+        dosage: i.dosage || '',
+        frequency: i.frequency || '',
+        durationDays: i.durationDays || 0,
+        quantity: i.quantity || 1,
+        instructions: i.instructions || '',
+        notes: p.notes || '',
+      }))
+    ),
+    labs: (encounter.labs || []).map(l => ({
+      testName: l.tests?.[0]?.testName || '',
+      value: l.tests?.[0]?.value || '',
+      units: l.tests?.[0]?.units || '',
+      referenceRange: l.tests?.[0]?.referenceRange || '',
+      flagged: !!l.tests?.[0]?.flagged,
+      status: l.status || 'ordered',
+      collectedAt: l.collectedAt
+        ? new Date(l.collectedAt).toISOString().slice(0, 16)
+        : '',
+      reportedAt: l.reportedAt
+        ? new Date(l.reportedAt).toISOString().slice(0, 16)
+        : '',
+    })),
+    imaging: (encounter.imaging || []).map(i => ({
+      modality: i.modality || 'XRAY',
+      studyName: i.studyName || '',
+      report: i.report || '',
+      performedAt: i.performedAt
+        ? new Date(i.performedAt).toISOString().slice(0, 16)
+        : '',
+      reportedAt: i.reportedAt
+        ? new Date(i.reportedAt).toISOString().slice(0, 16)
+        : '',
+    })),
+    notes: encounter.notes || '',
+    admission: null,
+    startedAt: encounter.startedAt || '',
+  };
+};
+
   const fetchData = async () => {
     try {
       const [patientsRes, usersRes] = await Promise.all([
@@ -51,42 +118,57 @@ export const EncounterForm = () => {
     }
   };
 
-  const fetchEncounter = async () => {
-    try {
-      const response = await api.getEncounterById(id);
-      const payload = response?.data?.data?.encounter || response?.data?.encounter || response?.data || response;
-      setEncounter(payload);
-    } catch (error) {
-      toast.error('Failed to fetch encounter');
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchEncounter = async () => {
+  try {
+    const res = await api.getEncounterById(id);
 
-  const initialValues = encounter || {
-    patient: '',
-    encounterType: 'outpatient',
-    seenBy: user?._id || '',
-    chiefComplaint: '',
-    historyOfPresentIllness: '',
-    examination: '',
-    vitals: {
-      temperatureC: '',
-      pulse: '',
-      respiratoryRate: '',
-      systolicBP: '',
-      diastolicBP: '',
-      spo2: '',
-      weightKg: '',
-      heightCm: '',
-    },
-    diagnoses: [],
-    prescriptions: [],
-    labs: [],
-    imaging: [],
-    admission: null,
-    notes: '',
-  };
+    const encounterData =
+      res?.data?.message?.encounter ??
+      res?.data?.encounter ??
+      res?.data?.data ??
+      null;
+
+    if (!encounterData) {
+      throw new Error('Encounter not found in response');
+    }
+
+    const normalized = normalizeEncounterForForm(encounterData, user);
+    setEncounter(normalized);
+  } catch (err) {
+    console.error(err);
+    toast.error('Failed to fetch encounter');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+const initialValues = encounter || {
+  patient: '',
+  encounterType: 'outpatient',
+  seenBy: user?._id || '',
+  chiefComplaint: '',
+  historyOfPresentIllness: '',
+  examination: '',
+  vitals: {
+    temperatureC: '',
+    pulse: '',
+    respiratoryRate: '',
+    systolicBP: '',
+    diastolicBP: '',
+    spo2: '',
+    weightKg: '',
+    heightCm: '',
+  },
+  diagnoses: [],
+  prescriptions: [],
+  labs: [],
+  imaging: [],
+  admission: null,
+  notes: '',
+};
+
+
 
 const handleSubmit = async (values) => {
   try {
@@ -120,7 +202,6 @@ const handleSubmit = async (values) => {
       };
 
       const res = await api.createDiagnosis(payload);
-      console.log('Diagnosis response:', res?.data);
 
       const diagId =
         res?.data?.data?.diagnosis?._id ||
@@ -155,7 +236,6 @@ const handleSubmit = async (values) => {
       };
 
       const res = await api.createPrescription(payload);
-      console.log('Prescription response:', res?.data);
 
       const presId =
         res?.data?.data?.prescription?._id ||
@@ -191,7 +271,6 @@ const handleSubmit = async (values) => {
       };
 
       const res = await api.createLabResult(payload);
-      console.log('Lab response:', res?.data);
 
       const labId =
         res?.data?.data?.labResult?._id ||
@@ -221,7 +300,6 @@ const handleSubmit = async (values) => {
       };
 
       const res = await api.createImagingReport(payload);
-      console.log('Imaging response:', res?.data);
 
       const imgId =
         res?.data?.data?.imagingReport?._id ||
@@ -235,13 +313,6 @@ const handleSubmit = async (values) => {
         console.warn('Imaging ID NOT FOUND', res?.data);
       }
     }
-
-    console.log('Collected IDs:', {
-      diagnosisIds,
-      prescriptionIds,
-      labIds,
-      imagingIds,
-    });
 
     /* --------------------------------------------------
        STEP 2: CREATE / UPDATE ENCOUNTER WITH IDS
@@ -269,11 +340,9 @@ const handleSubmit = async (values) => {
 
     if (id) {
       const res = await api.updateEncounter(id, encounterPayload);
-      console.log('Encounter update response:', res?.data);
       toast.success('Encounter updated');
     } else {
       const res = await api.createEncounter(encounterPayload);
-      console.log('Encounter create response:', res?.data);
 
       encounterId =
         res?.data?.data?.encounter?._id ||
@@ -291,7 +360,6 @@ const handleSubmit = async (values) => {
         encounter: encounterId,
         hospital,
       });
-      console.log('Admission response:', res?.data);
     }
 
     toast.success('Encounter saved successfully');
