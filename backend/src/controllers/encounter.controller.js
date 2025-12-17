@@ -65,7 +65,7 @@ export const getEncounters = asyncHandler(async (req, res) => {
     const encounters = await Encounter.find({ hospital: req.user.hospital })
         .sort({ startedAt: -1 })
         .limit(200)
-        .populate('patient', 'firstName lastName hospitalId dob gender')
+        .populate('patient', 'firstName lastName dob gender')
         .populate('seenBy', 'firstName lastName role')
         .populate('diagnoses')
         .populate('prescriptions')
@@ -100,8 +100,8 @@ function redactForCrossHospital(encounterObj) {
 
 export const getEncounterById = asyncHandler(async (req, res) => {
   const encounter = await Encounter.findById(req.params.id)
-    // .populate('patient')
-    // .populate('diagnoses')
+    .populate('patient')
+    .populate('diagnoses')
     .populate({
       path: 'prescriptions',
       populate: {

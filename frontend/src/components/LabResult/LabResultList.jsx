@@ -2,54 +2,83 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
 
 export const LabResultList = () => {
   const navigate = useNavigate();
-  const { user } = useApp();
 
-  const [results, setResults] = useState([]);
+  const [labs, setLabs] = useState([]);
+  const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filtered, setFiltered] = useState([]);
+
+  const [selectedLab, setSelectedLab] = useState(null);
+  const [selectedTest, setSelectedTest] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchLabResults();
+    fetchLabs();
   }, []);
 
   useEffect(() => {
-    const filteredData = results.filter((item) =>
-      item.patientName?.toLowerCase().includes(search.toLowerCase()) ||
-      item.testName?.toLowerCase().includes(search.toLowerCase())
-    );
-    setFiltered(filteredData);
-  }, [search, results]);
+    const q = search.toLowerCase();
 
-  const fetchLabResults = async () => {
+    if (!q) {
+      setFiltered(labs);
+      return;
+    }
+
+    setFiltered(
+      labs.filter((lab) => {
+        const patientName = `${lab.patient?.firstName || ''} ${lab.patient?.lastName || ''}`.toLowerCase();
+        const hasMatchingTest = lab.tests?.some(t =>
+          t.testName?.toLowerCase().includes(q)
+        );
+
+        return patientName.includes(q) || hasMatchingTest;
+      })
+    );
+  }, [search, labs]);
+
+  const fetchLabs = async () => {
     try {
-      const response = await api.getLabResults();
-      setResults(response.data.message.labResults || []);
-    } catch (error) {
+      const res = await api.getLabResults();
+      setLabs(res.data.message.labs || []);
+    } catch (err) {
+      console.error(err);
       toast.error('Failed to fetch lab results');
-      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this lab result?')) return;
+    if (!window.confirm('Delete this lab record?')) return;
+
     try {
       await api.deleteLabResult(id);
-      toast.success('Lab result deleted');
-      fetchLabResults();
-    } catch (error) {
-      toast.error('Failed to delete lab result');
+      toast.success('Lab record deleted');
+      fetchLabs();
+    } catch {
+      toast.error('Failed to delete lab record');
     }
   };
 
-  if (loading) return <div className="text-center py-10 text-lg">Loading...</div>;
+  const openModal = (lab, test) => {
+    setSelectedLab(lab);
+    setSelectedTest(test);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setSelectedLab(null);
+    setSelectedTest(null);
+    setIsModalOpen(false);
+  };
+
+  if (loading) {
+    return <div className="text-center py-10 text-lg">Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -59,101 +88,166 @@ export const LabResultList = () => {
 
         <button
           onClick={() => navigate('/lab-results/new')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
         >
           <Plus size={20} /> New Lab Result
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search by patient name or test name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+      {/* Search */}
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 text-gray-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by patient or test name..."
+            className="pl-10 w-full py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
         </div>
+      </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Patient</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Test Name</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Result</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
-              </tr>
-            </thead>
+      {/* Table */}
+      <div className="bg-white shadow rounded-lg overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Test</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Result</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Reported</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
+            </tr>
+          </thead>
 
-            <tbody>
-              {filtered.length > 0 ? (
-                filtered.map((item) => (
-                  <tr key={item._id} className="border-b hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                      {item.patientName || 'Unknown'}
+          <tbody>
+            {filtered.length > 0 ? (
+              filtered.flatMap((lab) =>
+                lab.tests.map((test, idx) => (
+                  <tr key={`${lab._id}-${idx}`} className="border-b hover:bg-gray-50">
+                    <td className="px-6 py-4 font-medium">
+                      {lab.patient
+                        ? `${lab.patient.firstName} ${lab.patient.lastName}`
+                        : 'N/A'}
                     </td>
 
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      {item.testName}
+                    <td className="px-6 py-4">
+                      {test.testName}
+                      {test.flagged && (
+                        <span className="ml-2 text-xs text-red-600 font-semibold">
+                          ⚠ Abnormal
+                        </span>
+                      )}
                     </td>
 
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {item.resultValue || 'N/A'}
+                    <td className="px-6 py-4 text-gray-700">
+                      {test.value} {test.units}
                     </td>
 
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(item.createdAt).toLocaleDateString()}
+                    <td className="px-6 py-4 capitalize text-gray-500">
+                      {lab.status}
                     </td>
 
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => navigate(`/lab-results/${item._id}/edit`)}
-                          className="text-blue-600 hover:text-blue-800 transition"
-                          title="View / Edit"
-                        >
-                          <Eye size={18} />
-                        </button>
+                    <td className="px-6 py-4 text-gray-500">
+                      {lab.reportedAt
+                        ? new Date(lab.reportedAt).toLocaleDateString()
+                        : '—'}
+                    </td>
 
-                        <button
-                          onClick={() => navigate(`/lab-results/${item._id}/edit`)}
-                          className="text-green-600 hover:text-green-800 transition"
-                          title="Edit"
-                        >
-                          <Edit size={18} />
-                        </button>
+                    <td className="px-6 py-4 flex gap-3">
+                      <button
+                        onClick={() => openModal(lab, test)}
+                        title="View"
+                      >
+                        <Eye size={18} className="text-blue-600" />
+                      </button>
 
-                        <button
-                          onClick={() => handleDelete(item._id)}
-                          className="text-red-600 hover:text-red-800 transition"
-                          title="Delete"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => navigate(`/lab-results/${lab._id}/edit`)}
+                        title="Edit"
+                      >
+                        <Edit size={18} className="text-green-600" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDelete(lab._id)}
+                        title="Delete"
+                      >
+                        <Trash2 size={18} className="text-red-600" />
+                      </button>
                     </td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
-                    No lab results found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-
-          </table>
-        </div>
+              )
+            ) : (
+              <tr>
+                <td colSpan="6" className="text-center py-6 text-gray-500">
+                  No lab results found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {/* ================= MODAL ================= */}
+      {isModalOpen && selectedLab && selectedTest && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-2xl p-6 relative">
+            <button
+              onClick={closeModal}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              <X />
+            </button>
+
+            <h2 className="text-2xl font-bold mb-4">Lab Result Details</h2>
+
+            <div className="space-y-2 text-sm">
+              <p>
+                <strong>Patient:</strong>{' '}
+                {selectedLab.patient
+                  ? `${selectedLab.patient.firstName} ${selectedLab.patient.lastName}`
+                  : 'N/A'}
+              </p>
+
+              <p><strong>Test:</strong> {selectedTest.testName}</p>
+              <p><strong>Status:</strong> {selectedLab.status}</p>
+
+              <p>
+                <strong>Collected At:</strong>{' '}
+                {new Date(selectedLab.collectedAt).toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Reported At:</strong>{' '}
+                {new Date(selectedLab.reportedAt).toLocaleString()}
+              </p>
+            </div>
+
+            <hr className="my-4" />
+
+            <div className="space-y-2">
+              <p>
+                <strong>Result:</strong>{' '}
+                {selectedTest.value} {selectedTest.units}
+              </p>
+
+              <p>
+                <strong>Reference Range:</strong>{' '}
+                {selectedTest.referenceRange}
+              </p>
+
+              {selectedTest.flagged && (
+                <p className="text-red-600 font-semibold">
+                  ⚠ This value is outside the normal range
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
