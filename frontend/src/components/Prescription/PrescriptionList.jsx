@@ -19,17 +19,36 @@ export const PrescriptionList = () => {
   }, []);
 
   useEffect(() => {
-    const filteredData = prescriptions.filter((p) =>
-      p.patientName?.toLowerCase().includes(search.toLowerCase()) ||
-      p.medication?.toLowerCase().includes(search.toLowerCase())
-    );
+    const s = search.toLowerCase();
+
+    const filteredData = prescriptions.filter((p) => {
+      const patientName =
+        p.patientName ||
+        p.patient?.name ||
+        p.encounter?.patient?.name ||
+        '';
+
+      return (
+        s === '' ||
+        patientName.toLowerCase().includes(s) ||
+        p.medication?.toLowerCase().includes(s)
+      );
+    });
+
     setFiltered(filteredData);
   }, [search, prescriptions]);
 
   const fetchPrescriptions = async () => {
     try {
-      const response = await api.getPrescriptions();
-      setPrescriptions(response.data.message.prescriptions || []);
+      const res = await api.getPrescriptions();
+
+      const list =
+        res?.data?.message?.prescriptions ||
+        res?.data?.prescriptions ||
+        res?.data ||
+        [];
+
+      setPrescriptions(list);
     } catch (error) {
       toast.error('Failed to fetch prescriptions');
       console.error(error);
@@ -65,7 +84,7 @@ export const PrescriptionList = () => {
         </button>
       </div>
 
-      {/* Search Bar */}
+      {/* Search */}
       <div className="bg-white rounded-lg shadow">
         <div className="p-6 border-b">
           <div className="relative">
@@ -75,7 +94,7 @@ export const PrescriptionList = () => {
               placeholder="Search by patient or medication..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border rounded-lg"
             />
           </div>
         </div>
@@ -85,61 +104,48 @@ export const PrescriptionList = () => {
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Patient</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Medication</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Dosage</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Frequency</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Medication</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Dosage</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Frequency</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Date</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
               </tr>
             </thead>
 
             <tbody>
               {filtered.length > 0 ? (
-                filtered.map((prescription) => (
-                  <tr key={prescription._id} className="border-b hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                      {prescription.patientName || 'Unknown'}
+                filtered.map((p) => (
+                  <tr key={p._id} className="border-b hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      {p.patientName ||
+                        p.patient?.name ||
+                        p.encounter?.patient?.name ||
+                        'Unknown'}
                     </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      {prescription.medication}
+                    <td className="px-6 py-4">{p.medication}</td>
+                    <td className="px-6 py-4">{p.dosage}</td>
+                    <td className="px-6 py-4">{p.frequency}</td>
+                    <td className="px-6 py-4">
+                      {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '-'}
                     </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {prescription.dosage}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {prescription.frequency}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(prescription.createdAt).toLocaleDateString()}
-                    </td>
-
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-6 py-4">
                       <div className="flex gap-3">
                         <button
-                          onClick={() => navigate(`/prescriptions/${prescription._id}`)}
-                          className="text-blue-600 hover:text-blue-800 transition"
-                          title="View"
+                          onClick={() => navigate(`/prescriptions/${p._id}`)}
+                          className="text-blue-600"
                         >
                           <Eye size={18} />
                         </button>
-
                         <button
-                          onClick={() => navigate(`/prescriptions/${prescription._id}/edit`)}
-                          className="text-green-600 hover:text-green-800 transition"
-                          title="Edit"
+                          onClick={() => navigate(`/prescriptions/${p._id}/edit`)}
+                          className="text-green-600"
                         >
                           <Edit size={18} />
                         </button>
-
                         <button
-                          onClick={() => handleDelete(prescription._id)}
-                          className="text-red-600 hover:text-red-800 transition"
-                          title="Delete"
+                          onClick={() => handleDelete(p._id)}
+                          className="text-red-600"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -149,16 +155,17 @@ export const PrescriptionList = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-6 text-center text-gray-500">
                     No prescriptions found
                   </td>
                 </tr>
               )}
             </tbody>
-
           </table>
         </div>
       </div>
     </div>
   );
 };
+
+export default PrescriptionList;

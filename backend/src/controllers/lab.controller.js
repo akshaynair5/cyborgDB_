@@ -31,9 +31,27 @@ export const createLabResult = asyncHandler(async (req, res) => {
 
 
 export const getLabResults = asyncHandler(async (req, res) => {
-const labs = await LabResult.find({ hospital: req.user.hospital });
-return res.status(200).json(new ApiResponse(200, { labs }));
+  const labs = await LabResult.find({
+    hospital: req.user.hospital
+  })
+    .populate('patient', 'firstName lastName')
+    .sort({ createdAt: -1 });
+
+  const labResults = labs.map((lab) => ({
+    _id: lab._id,
+    patientName: lab.patient
+      ? `${lab.patient.firstName} ${lab.patient.lastName}`
+      : 'Unknown',
+    testName: lab.testName || lab.test || '-', // depends on your schema
+    resultValue: lab.resultValue || '-',
+    createdAt: lab.createdAt
+  }));
+
+  return res.status(200).json(
+    new ApiResponse(200, { labResults })
+  );
 });
+
 
 
 export const getLabResultById = asyncHandler(async (req, res) => {

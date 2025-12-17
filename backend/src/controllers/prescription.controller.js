@@ -28,9 +28,29 @@ export const createPrescription = asyncHandler(async (req, res) => {
 });
 
 export const getPrescriptions = asyncHandler(async (req, res) => {
-    const prescriptions = await Prescription.find({ hospital: req.user.hospital });
-    return res.status(200).json(new ApiResponse(200, { prescriptions }));
+    const prescriptions = await Prescription.find({ hospital: req.user.hospital })
+        .populate('patient', 'firstName lastName')
+        .populate({
+            path: 'items',
+        })
+        .sort({ createdAt: -1 });
+
+    const formatted = prescriptions.map(p => ({
+        _id: p._id,
+        patientName: p.patient
+            ? `${p.patient.firstName} ${p.patient.lastName}`
+            : 'Unknown',
+        medication: p.items?.[0]?.medication || '',
+        dosage: p.items?.[0]?.dosage || '',
+        frequency: p.items?.[0]?.frequency || '',
+        createdAt: p.createdAt
+    }));
+
+    return res.status(200).json(
+        new ApiResponse(200, { prescriptions: formatted })
+    );
 });
+
 
 
 export const getPrescriptionsForPatient = asyncHandler(async (req, res) => {
