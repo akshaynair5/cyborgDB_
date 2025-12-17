@@ -15,6 +15,8 @@ from cryptography.fernet import Fernet
 import cyborgdb 
 import secrets
 from flask_cors import CORS
+import dotenv
+dotenv.load_dotenv()
 
 # ==================================================
 # CONFIGURATION
@@ -31,7 +33,7 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 LOCAL_MODEL = "deepseek-r1:1.5b"
 
 # 3. REAL CYBORG DB CONNECTION (Docker)
-CYBORG_API_KEY = "cyborg_093ee86b4ec04fcca20a9c6fca66a368"
+CYBORG_API_KEY = dotenv.get_key(dotenv.find_dotenv(), "CYBORGDB_API_KEY")
 vector_client = cyborgdb.Client("http://localhost:8000", api_key=CYBORG_API_KEY)
 
 # Index Setup
@@ -47,19 +49,15 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("medsec-real")
 
-# ==================================================
-# ROBUST INITIALIZATION
-# ==================================================
 
-# Try to connect to or create the index globally
 try:
-    # Attempt load
+    
     vector_index = vector_client.load_index(INDEX_NAME, index_key=index_key_bytes)
     print(f"[MedSec] ✅ Connected to existing index: {INDEX_NAME}")
 except Exception:
     print(f"[MedSec] ⚠️ Index not found. Creating new one...")
     try:
-        # We try passing the config as a dictionary structured for the API
+
         config = {
             "ivfflat": {
                 "dimension": 768,
@@ -72,7 +70,7 @@ except Exception:
 
     except Exception as e:
         print(f"CRITICAL: Index creation failed. Error: {e}")
-        # Fallback to simple creation if complex config fails
+   
         vector_index = vector_client.create_index(INDEX_NAME, index_key_bytes, {"dimension": 768})
 
 # ==================================================
@@ -116,10 +114,10 @@ def search():
         # Get parameters from Frontend
         data = request.json
         query = data.get("query")
-        scope = data.get("scope", "global")          # "local" or "global"
-        requester_hospital = data.get("hospital_id") # The doctor's hospital ID
+        scope = data.get("scope", "global")         
+        requester_hospital = data.get("hospital_id") 
         
-        # 1. Fetch MORE results (top_k=20) so we have enough left after filtering
+
         results = vector_index.query([0.001]*768, top_k=20)
         
         matches = []
@@ -132,10 +130,10 @@ def search():
             if blob: 
                 decrypted_meta = decrypt_metadata(blob)
             
-            # --- FILTERING LOGIC (The Missing Piece) ---
+      
             record_hospital = decrypted_meta.get("hospital_id")
             
-            # If Scope is LOCAL, skip records from other hospitals
+
             if scope == "local" and record_hospital != requester_hospital:
                 continue
             # -------------------------------------------
@@ -146,7 +144,7 @@ def search():
             if full_data: 
                 matches.append({
                     "encounter_id": eid, 
-                    "hospital_id": record_hospital, # IMPORTANT: Send this to UI for button color
+                    "hospital_id": record_hospital, 
                     "encounter": json.loads(full_data), 
                     "score": r.get('score', 0.0)
                 })
