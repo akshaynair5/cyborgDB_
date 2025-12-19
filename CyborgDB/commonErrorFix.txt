@@ -1,0 +1,19 @@
+ERROR:medsec-bio:❌ CRITICAL DATABASE ERROR: Failed to create index: (400)
+Reason: Bad Request
+HTTP response headers: HTTPHeaderDict({'date': 'Fri, 19 Dec 2025 05:29:48 GMT', 'server': 'uvicorn', 'content-length': '117', 'content-type': 'application/json'})
+HTTP response body: {"detail":"Failed to create index: Invalid input: Failed to create index: Index name medsec-final-v4 already exists"}
+
+Solution : run python force_reset.py
+
+
+Container Conflict
+docker: Error response from daemon: Conflict. The container name "/cyborgdb-service" is already in use by container "556f793ff14a519afbd4bca3afe38be5b5d8e929483a0ab21313a35a3addf18a". You have to remove (or rename) that container to be able to reuse that name.
+
+Run 'docker run --help' for more information
+
+Solution : docker rm -f cyborgdb-service
+           docker run -p 8000:8000 --name cyborgdb-service --network medsec-net ^
+ -e CYBORGDB_API_KEY=cyborg_093ee86b4ec04fcca20a9c6fca66a368 ^
+-e CYBORGDB_DB_TYPE=redis ^
+-e CYBORGDB_CONNECTION_STRING=host:medsec-redis,port:6379,db:0 ^
+ cyborginc/cyborgdb-service

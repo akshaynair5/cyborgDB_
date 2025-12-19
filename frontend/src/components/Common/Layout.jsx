@@ -141,20 +141,20 @@ const Layout = ({ children }) => {
         )}
 
         {/* Nav */}
-        <nav className="mt-6 px-3 space-y-1 flex-1">
+        <nav className="mt-6 px-3 space-y-1 flex-1 overflow-y-auto no-scrollbar">
           {menuItems.map(item => {
             const active = isActive(item.path);
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl ${
+            className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl ${
                   active
                     ? 'bg-blue-600 text-white'
                     : 'hover:bg-slate-700 text-slate-300'
                 }`}
               >
-                <item.icon size={20} />
+                <item.icon size={15} />
                 {sidebarOpen && item.label}
               </button>
             );
@@ -162,12 +162,12 @@ const Layout = ({ children }) => {
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-slate-700">
+        <div className="p-1 border-t border-slate-700">
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-red-500/20 text-slate-300"
           >
-            <LogOut size={20} />
+            <LogOut size={15} />
             {sidebarOpen && 'Logout'}
           </button>
         </div>

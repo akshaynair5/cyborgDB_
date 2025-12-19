@@ -1,8 +1,3 @@
-"""
-MedSec: Synthetic Clinical Data for Hackathon Demo
-Includes diverse cases to demonstrate semantic search capabilities.
-"""
-
 MOCK_DATA = [
     # --- CARDIOLOGY (Heart) ---
     {
@@ -10,10 +5,10 @@ MOCK_DATA = [
         "hospital_id": "CITY_GEN_01",
         "payload": {
             "encounter_date": "2024-11-10",
-            "chief_complaint": "Crushing chest pain radiating to left arm",
+            "chief_complaint": "Crushing substernal chest pain radiating to left arm and jaw, diaphoresis",
             "diagnosis": "Acute Myocardial Infarction (STEMI)",
-            "treatment": "Emergency Angioplasty, Aspirin, Heparin",
-            "outcome": "Stable, transferred to ICU"
+            "treatment": "Emergency Coronary Angioplasty (PCI) with drug-eluting stent placement to LAD. Dual antiplatelet therapy (Aspirin + Clopidogrel), Heparin drip, and Atorvastatin 80mg loading dose.",
+            "outcome": "ST-segment resolution post-PCI. Stable hemodynamics. Transferred to CCU."
         }
     },
     {
@@ -21,10 +16,10 @@ MOCK_DATA = [
         "hospital_id": "CITY_GEN_01",
         "payload": {
             "encounter_date": "2024-11-12",
-            "chief_complaint": "Shortness of breath and swelling in legs",
-            "diagnosis": "Congestive Heart Failure (CHF)",
-            "treatment": "Furosemide (Lasix), Oxygen therapy",
-            "outcome": "Symptoms improved, fluid overload resolved"
+            "chief_complaint": "Progressive dyspnea on exertion, orthopnea, and bilateral pitting edema",
+            "diagnosis": "Decompensated Congestive Heart Failure (CHF)",
+            "treatment": "IV Furosemide (Lasix) 40mg BID for diuresis. Captopril initiation for afterload reduction. Oxygen supplementation via nasal cannula. Fluid restriction <1.5L/day.",
+            "outcome": "Net negative fluid balance (-1.2L). Dyspnea improved. Discharged on oral diuretics."
         }
     },
 
@@ -34,10 +29,10 @@ MOCK_DATA = [
         "hospital_id": "WEST_NEURO_05",
         "payload": {
             "encounter_date": "2024-12-01",
-            "chief_complaint": "Sudden onset severe headache with visual aura",
+            "chief_complaint": "Severe unilateral throbbing headache preceded by scintillating scotoma (visual aura)",
             "diagnosis": "Migraine with Aura",
-            "treatment": "Sumatriptan, Dark room rest",
-            "outcome": "Headache resolved after 4 hours"
+            "treatment": "Sumatriptan 100mg PO at onset. IV Metoclopramide for nausea. Ketorolac 30mg IV for refractory pain. Patient advised to rest in a dark, quiet environment.",
+            "outcome": "Pain score reduced from 9/10 to 2/10 within 4 hours. Discharged with neurology follow-up."
         }
     },
     {
@@ -45,34 +40,34 @@ MOCK_DATA = [
         "hospital_id": "WEST_NEURO_05",
         "payload": {
             "encounter_date": "2024-12-05",
-            "chief_complaint": "Seizure activity lasting 2 minutes, confusion afterwards",
+            "chief_complaint": "Witnessed generalized tonic-clonic seizure lasting >2 minutes followed by post-ictal confusion",
             "diagnosis": "Epilepsy (Grand Mal Seizure)",
-            "treatment": "Lorazepam IV, Levetiracetam maintenance",
-            "outcome": "Seizure stopped, patient post-ictal but stable"
+            "treatment": "Lorazepam 4mg IV push for acute cessation. Levetiracetam (Keppra) 1000mg IV loading dose. MRI Brain ordered to rule out structural lesion.",
+            "outcome": "No recurrence of seizure activity. Mental status returned to baseline after 1 hour."
         }
     },
 
-    # --- PEDIATRICS (Kids) ---
+    # --- RARE / ORPHAN DISEASES (The "Consortium Value" Cases) ---
     {
-        "encounter_id": "PEDS_001",
-        "hospital_id": "KIDS_HOPE_09",
+        "encounter_id": "RARE_001",
+        "hospital_id": "PRINCE_HOSP_02",  # Different Hospital (Good for Global Search demo)
         "payload": {
-            "encounter_date": "2024-12-10",
-            "chief_complaint": "7 year old boy with high fever and barking cough",
-            "diagnosis": "Croup (Laryngotracheobronchitis)",
-            "treatment": "Dexamethasone, Nebulized Epinephrine",
-            "outcome": "Breathing improved, discharged home"
+            "encounter_date": "2024-12-08",
+            "chief_complaint": "Recurrent unexplained abdominal pain, skin rash, and dark urine after starting antibiotics",
+            "diagnosis": "Acute Intermittent Porphyria (AIP)",
+            "treatment": "Discontinuation of precipitating medications. IV Hemin (Panhematin) infusion 3mg/kg daily for 4 days. High carbohydrate diet (glucose loading) to suppress heme synthesis.",
+            "outcome": "Abdominal pain resolved. Urine color normalized. Genetic counseling referral provided."
         }
     },
     {
-        "encounter_id": "PEDS_002",
-        "hospital_id": "KIDS_HOPE_09",
+        "encounter_id": "RARE_002",
+        "hospital_id": "PRINCE_HOSP_02",
         "payload": {
-            "encounter_date": "2024-12-11",
-            "chief_complaint": "Child with wheezing and difficulty breathing after playing outside",
-            "diagnosis": "Acute Asthma Exacerbation",
-            "treatment": "Albuterol Nebulizer, Oral Steroids",
-            "outcome": "Wheezing resolved, O2 sats 98%"
+            "encounter_date": "2024-12-09",
+            "chief_complaint": "Progressive muscle weakness, ptosis (droopy eyelids), and difficulty swallowing worsening at night",
+            "diagnosis": "Myasthenia Gravis (Myasthenic Crisis)",
+            "treatment": "Intravenous Immunoglobulin (IVIG) therapy 2g/kg over 5 days. Pyridostigmine (Mestinon) maintenance. Plasmapheresis scheduled if refractory to IVIG.",
+            "outcome": "Respiratory function stabilized. Swallow study passed. Transferred to step-down unit."
         }
     },
 
@@ -82,10 +77,10 @@ MOCK_DATA = [
         "hospital_id": "TRAUMA_CTR_02",
         "payload": {
             "encounter_date": "2024-12-14",
-            "chief_complaint": "Fell from bike, severe pain in right forearm",
-            "diagnosis": "Distal Radius Fracture",
-            "treatment": "Closed Reduction and Casting",
-            "outcome": "Alignment good, cast applied for 6 weeks"
+            "chief_complaint": "Traumatic fall onto outstretched hand (FOOSH), gross deformity of right wrist",
+            "diagnosis": "Distal Radius Fracture (Colles' Fracture)",
+            "treatment": "Hematoma block with Lidocaine. Closed reduction under fluoroscopic guidance. Sugar-tong splint application. Post-reduction X-rays confirm alignment.",
+            "outcome": "Neurovascularly intact. Referred to Ortho clinic for cast application in 1 week."
         }
     },
     {
@@ -93,10 +88,10 @@ MOCK_DATA = [
         "hospital_id": "TRAUMA_CTR_02",
         "payload": {
             "encounter_date": "2024-12-15",
-            "chief_complaint": "Twisted ankle playing soccer, swelling",
-            "diagnosis": "Grade 2 Ankle Sprain",
-            "treatment": "RICE protocol (Rest, Ice, Compression, Elevation)",
-            "outcome": "Discharged with crutches"
+            "chief_complaint": "Inversion injury to left ankle during sports, lateral malleolus swelling",
+            "diagnosis": "Grade 2 Anterior Talo-Fibular Ligament (ATFL) Sprain",
+            "treatment": "Air-Stirrup ankle brace application. RICE protocol (Rest, Ice, Compression, Elevation). Weight bearing as tolerated with crutches.",
+            "outcome": "Stable joint on anterior drawer test. Discharged with physical therapy referral."
         }
     },
 
@@ -106,10 +101,10 @@ MOCK_DATA = [
         "hospital_id": "CITY_GEN_01",
         "payload": {
             "encounter_date": "2024-12-16",
-            "chief_complaint": "Fever, body aches, sore throat for 3 days",
-            "diagnosis": "Influenza A",
-            "treatment": "Oseltamivir (Tamiflu), Fluids",
-            "outcome": "Recovering at home"
+            "chief_complaint": "Sudden high fever (39.5C), myalgia, dry cough, and severe fatigue",
+            "diagnosis": "Influenza A (H3N2 Strain)",
+            "treatment": "Oseltamivir (Tamiflu) 75mg BID for 5 days. Acetaminophen for antipyresis. Hydration therapy.",
+            "outcome": "Fever curve trending down. Oxygen saturation maintained >98% on room air."
         }
     },
     {
@@ -117,10 +112,10 @@ MOCK_DATA = [
         "hospital_id": "CITY_GEN_01",
         "payload": {
             "encounter_date": "2024-12-17",
-            "chief_complaint": "High fever, stiff neck, sensitivity to light",
-            "diagnosis": "Viral Meningitis",
-            "treatment": "Supportive care, monitoring, lumbar puncture",
-            "outcome": "Headache persisting, admitted for observation"
+            "chief_complaint": "Severe nuchal rigidity (stiff neck), photophobia, and fever",
+            "diagnosis": "Viral Meningitis (Enterovirus confirmed)",
+            "treatment": "Lumbar Puncture performed (Result: Pleocytosis, Normal Glucose). IV Acyclovir started empirically then discontinued after HSV negative. Supportive analgesia.",
+            "outcome": "Headache persisting but manageable. Neurologically intact. Admitted for observation."
         }
     }
 ]
