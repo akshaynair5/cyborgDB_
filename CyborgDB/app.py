@@ -1,5 +1,5 @@
 """
-MedSec: Real Encrypted Vector Search (Auto-Seeding Version) - Optimized for Python 3.13
+MedSec: Real Encrypted Vector Search (Auto-Seeding Version) - Optimized for Python 3.13 with MiniLM
 """
 import os
 import json
@@ -7,16 +7,15 @@ import time
 import logging
 import dotenv
 import numpy as np
-import torch
 import redis
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from transformers import AutoTokenizer, AutoModel
 from cryptography.fernet import Fernet
 import cyborgdb 
 from cyborgdb.openapi_client.models import IndexIVFFlatModel
 from google import genai  # Modern Python 3.13 SDK
 from load_demo_data import MOCK_DATA
+from sentence_transformers import SentenceTransformer
 
 # ================= CONFIG & ENV =================
 dotenv.load_dotenv()
@@ -27,7 +26,6 @@ CONSORTIUM_KEY = os.environ.get(
 )
 cipher_suite = Fernet(CONSORTIUM_KEY)
 
-BERT_MODEL_NAME = "emilyalsentzer/Bio_ClinicalBERT"
 INDEX_NAME = os.environ.get("INDEX_NAME", "medsec-final-v4")
 CYBORG_API_KEY = os.environ.get("CYBORGDB_API_KEY")
 CYBORGDB_URL = os.environ.get("CYBORGDB_URL")
@@ -42,50 +40,39 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # --- MODERN GEMINI SETUP ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-# Using 2.0-Flash (Stable and fast for clinical reasoning)
 GEMINI_MODEL_ID = "gemini-2.0-flash" 
 genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
+# Flask App
 app = Flask(__name__)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("medsec-bio")
 
-# 1. AI MODEL LOADING (BERT)
-logger.info("⏳ Loading Bio_ClinicalBERT...")
+# ================= LOAD LIGHTWEIGHT EMBEDDING MODEL =================
+logger.info("⏳ Loading sentence-transformers MiniLM model (lightweight)...")
 try:
-    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
-    bert_model = AutoModel.from_pretrained(BERT_MODEL_NAME)
-    bert_model.eval()
-    logger.info("✅ Bio_ClinicalBERT Ready.")
+    embed_model = SentenceTransformer("all-MiniLM-L6-v2")  # ~90MB
+    logger.info("✅ MiniLM model ready for embeddings.")
 except Exception as e:
-    logger.error(f"❌ Failed to load BERT: {e}")
+    logger.error(f"❌ Failed to load MiniLM: {e}")
     exit(1)
 
-# 2. HELPER FUNCTIONS
-def get_embedding(text):
-    inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
-    with torch.no_grad():
-        outputs = bert_model(**inputs)
-    embeddings = outputs.last_hidden_state
-    mask = inputs['attention_mask'].unsqueeze(-1).expand(embeddings.size()).float()
-    mean_pooled = torch.sum(embeddings * mask, 1) / torch.clamp(mask.sum(1), min=1e-9)
-    
-    vector_np = mean_pooled[0].numpy()
-    norm = np.linalg.norm(vector_np)
-    if norm > 0: vector_np = vector_np / norm
-    return vector_np.tolist()
+# ================= HELPERS =================
+def get_embedding(text: str):
+    vec = embed_model.encode(text, normalize_embeddings=True)
+    return vec.tolist()
 
 def encrypt_metadata(metadata):
     return cipher_suite.encrypt(json.dumps(metadata).encode()).decode()
 
 def decrypt_metadata(token):
-    try: 
+    try:
         return json.loads(cipher_suite.decrypt(token.encode()).decode())
-    except Exception: 
+    except Exception:
         return {}
 
-# 3. AUTO-SEEDING FUNCTION
+# ================= AUTO-SEED DATABASE =================
 def seed_database(v_index):
     logger.info("🌱 Seeding database with FULL Clinical Dataset...")
     count = 0
@@ -95,7 +82,6 @@ def seed_database(v_index):
             text = f"{case['payload']['diagnosis']} {case['payload']['chief_complaint']}"
             vec = get_embedding(text)
             meta = encrypt_metadata({"hospital_id": case["hospital_id"]})
-            
             v_index.upsert([{
                 "id": f"encounter:{case['encounter_id']}", 
                 "vector": vec, 
@@ -104,26 +90,25 @@ def seed_database(v_index):
             count += 1
         except Exception as e:
             logger.error(f"❌ Failed to seed {case['encounter_id']}: {e}")
-            
     logger.info(f"✨ Successfully seeded {count} patients.")
 
-# 4. DATABASE INITIALIZATION
+# ================= DATABASE INITIALIZATION =================
 logger.info(f"🔌 Connecting to Index: {INDEX_NAME}...")
 try:
-    # Fresh start for demo purposes
     try:
         vector_client.delete_index(INDEX_NAME)
         time.sleep(1)
-    except Exception: pass
+    except Exception:
+        pass
 
-    config = IndexIVFFlatModel(dimension=768, n_lists=1, metric="cosine")
+    config = IndexIVFFlatModel(dimension=384, n_lists=1, metric="cosine")  # MiniLM outputs 384-dim
     vector_index = vector_client.create_index(INDEX_NAME, index_key_bytes, config)
     seed_database(vector_index)
 except Exception as e:
     logger.error(f"❌ CRITICAL DATABASE ERROR: {e}")
     exit(1)
 
-# 5. REASONING ENGINE
+# ================= REASONING ENGINE =================
 def synthesize_answer(query, encounters):
     if not encounters:
         return {
@@ -157,12 +142,10 @@ Structure your response EXACTLY into these three sections:
 (Provide 3 specific clinical recommendations)"""
 
     try:
-        # Modern SDK Call
         response = genai_client.models.generate_content(
             model=GEMINI_MODEL_ID,
             contents=prompt
         )
-        
         full_text = response.text
         insights, management, next_steps = "Analysis pending.", "N/A", "Review cases."
 
@@ -174,7 +157,6 @@ Structure your response EXACTLY into these three sections:
             next_steps = full_text.split("[NEXT_STEPS]")[1].strip()
 
         def clean(text): return text.replace("**", "").replace("##", "").strip()
-
         return {
             "clinical_insights": clean(insights),
             "management_outcomes": clean(management),
@@ -184,7 +166,7 @@ Structure your response EXACTLY into these three sections:
         logger.error(f"LLM Error: {e}")
         return {"clinical_insights": "Error connecting to AI.", "management_outcomes": "N/A", "suggested_next_steps": "N/A"}
 
-# 6. ROUTES
+# ================= ROUTES =================
 @app.route("/upsert-encounter", methods=["POST"])
 def upsert():
     try:
@@ -203,32 +185,27 @@ def search():
         d = request.json
         q_vec = get_embedding(d.get("query"))
         results = vector_index.query(q_vec, top_k=10)
-        
         matches = []
         for r in results:
             secure_blob = r.get('metadata', {}).get("secure_blob")
             meta = decrypt_metadata(secure_blob)
-            
-            # Scope filtering
             if d.get("scope") == "local" and meta.get("hospital_id") != d.get("hospital_id"):
                 continue
-            
             eid = r['id'].replace("encounter:", "")
             full_data = redis_client.get(f"encounter:{eid}")
             if full_data:
                 matches.append({
-                    "encounter_id": eid, 
+                    "encounter_id": eid,
                     "hospital_id": meta.get("hospital_id"),
-                    "encounter": json.loads(full_data), 
+                    "encounter": json.loads(full_data),
                     "score": float(r.get('score', r.get('distance', 0.0)))
                 })
-        
         final_matches = matches[:5]
         synthesis = synthesize_answer(d.get("query"), final_matches)
-        
         return jsonify({"matches": final_matches, "synthesis": synthesis})
-    except Exception as e: 
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ================= ENTRYPOINT =================
 if __name__ == "__main__":
     app.run(port=5000, debug=False)
