@@ -1,50 +1,50 @@
 """
-MedSec: Real Encrypted Vector Search (Auto-Seeding Version)
+MedSec: Real Encrypted Vector Search (Auto-Seeding Version) - Optimized for Python 3.13
 """
-from flask import Flask, request, jsonify
-import redis
+import os
 import json
-import logging
-import requests
-import torch
-import numpy as np
 import time
+import logging
+import dotenv
+import numpy as np
+import torch
+import redis
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModel
 from cryptography.fernet import Fernet
 import cyborgdb 
-from flask_cors import CORS
 from cyborgdb.openapi_client.models import IndexIVFFlatModel
-import dotenv
-import google.generativeai as genai
+from google import genai  # Modern Python 3.13 SDK
 from load_demo_data import MOCK_DATA
 
-# -------------------------------------------
+# ================= CONFIG & ENV =================
 dotenv.load_dotenv()
 
-# CONFIGURATION
-CONSORTIUM_KEY = b'20siSj50fTPrCndwzj_Da45JlrN4vwDfT3GcsGYlYwQ=' 
+CONSORTIUM_KEY = os.environ.get(
+    "CONSORTIUM_KEY",
+    b'20siSj50fTPrCndwzj_Da45JlrN4vwDfT3GcsGYlYwQ='
+)
 cipher_suite = Fernet(CONSORTIUM_KEY)
-OLLAMA_BASE = "http://localhost:11434/api"
-CHAT_MODEL = "deepseek-r1:1.5b"
+
 BERT_MODEL_NAME = "emilyalsentzer/Bio_ClinicalBERT"
+INDEX_NAME = os.environ.get("INDEX_NAME", "medsec-final-v4")
+CYBORG_API_KEY = os.environ.get("CYBORGDB_API_KEY")
+CYBORGDB_URL = os.environ.get("CYBORGDB_URL")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
-# DB CONNECT
-CYBORG_API_KEY = dotenv.get_key(".env" ,"CYBORGDB_API_KEY" )
-vector_client = cyborgdb.Client("http://localhost:8000", api_key=CYBORG_API_KEY)
-
-# INDEX SETUP
-INDEX_NAME = "medsec-final-v4" 
+# Vector DB Setup
+vector_client = cyborgdb.Client(CYBORGDB_URL, api_key=CYBORG_API_KEY)
 index_key_bytes = bytes.fromhex("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
 
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+# Redis Setup
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
-# --- GEMINI SETUP ---
-GEMINI_MODEL = "gemini-2.5-flash" 
-GEMINI_API_KEY = dotenv.get_key(".env", "GEMINI_API_KEY")
-
-genai.configure(api_key=GEMINI_API_KEY)
-
-gemini_model = genai.GenerativeModel(GEMINI_MODEL)
+# --- MODERN GEMINI SETUP ---
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# Using 2.0-Flash (Stable and fast for clinical reasoning)
+GEMINI_MODEL_ID = "gemini-2.0-flash" 
+genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
 CORS(app)
@@ -55,7 +55,6 @@ logger = logging.getLogger("medsec-bio")
 logger.info("⏳ Loading Bio_ClinicalBERT...")
 try:
     tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
-    
     bert_model = AutoModel.from_pretrained(BERT_MODEL_NAME)
     bert_model.eval()
     logger.info("✅ Bio_ClinicalBERT Ready.")
@@ -67,7 +66,6 @@ except Exception as e:
 def get_embedding(text):
     inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
     with torch.no_grad():
-       
         outputs = bert_model(**inputs)
     embeddings = outputs.last_hidden_state
     mask = inputs['attention_mask'].unsqueeze(-1).expand(embeddings.size()).float()
@@ -82,24 +80,23 @@ def encrypt_metadata(metadata):
     return cipher_suite.encrypt(json.dumps(metadata).encode()).decode()
 
 def decrypt_metadata(token):
-    try: return json.loads(cipher_suite.decrypt(token.encode()).decode())
-    except: return {}
+    try: 
+        return json.loads(cipher_suite.decrypt(token.encode()).decode())
+    except Exception: 
+        return {}
 
 # 3. AUTO-SEEDING FUNCTION
-def seed_database():
-    logger.info("🌱 Seeding database with FULL Clinical Dataset from 'load_demo_data.py'...")
-    
+def seed_database(v_index):
+    logger.info("🌱 Seeding database with FULL Clinical Dataset...")
     count = 0
     for case in MOCK_DATA:
         try:
             redis_client.set(f"encounter:{case['encounter_id']}", json.dumps(case["payload"]))
-            
             text = f"{case['payload']['diagnosis']} {case['payload']['chief_complaint']}"
             vec = get_embedding(text)
-            
             meta = encrypt_metadata({"hospital_id": case["hospital_id"]})
             
-            vector_index.upsert([{
+            v_index.upsert([{
                 "id": f"encounter:{case['encounter_id']}", 
                 "vector": vec, 
                 "metadata": {"secure_blob": meta}
@@ -108,108 +105,73 @@ def seed_database():
         except Exception as e:
             logger.error(f"❌ Failed to seed {case['encounter_id']}: {e}")
             
-    logger.info(f"✨ Automatically seeded {count} patients into CyborgDB.")
+    logger.info(f"✨ Successfully seeded {count} patients.")
 
-# 4. DATABASE SETUP (With Auto-Seed Call)
+# 4. DATABASE INITIALIZATION
 logger.info(f"🔌 Connecting to Index: {INDEX_NAME}...")
-
-# Wipe Old Data (For Fresh Demo)
 try:
-    vector_client.delete_index(INDEX_NAME)
-    time.sleep(1)
-    logger.info("   - Cleared existing index (Fresh Start).")
-except Exception:
-    pass
+    # Fresh start for demo purposes
+    try:
+        vector_client.delete_index(INDEX_NAME)
+        time.sleep(1)
+    except Exception: pass
 
-# Create New Index & Seed
-try:
     config = IndexIVFFlatModel(dimension=768, n_lists=1, metric="cosine")
     vector_index = vector_client.create_index(INDEX_NAME, index_key_bytes, config)
-    logger.info("✅ Created NEW empty index.")
-    
-    seed_database()
-    
+    seed_database(vector_index)
 except Exception as e:
     logger.error(f"❌ CRITICAL DATABASE ERROR: {e}")
     exit(1)
 
-# 5. CUMULATIVE REASONING ENGINE
+# 5. REASONING ENGINE
 def synthesize_answer(query, encounters):
-    evidence_text = ""
-    for i, e in enumerate(encounters):
-        data = e.get('encounter', {})
-        evidence_text += (
-            f"Case {i+1}: [Diagnosis: {data.get('diagnosis')}] "
-            f"[Treatment: {data.get('treatment')}] "
-            f"[Outcome: {data.get('outcome')}] "
-            f"[Complaint: {data.get('chief_complaint')}]\n"
-        )
+    if not encounters:
+        return {
+            "clinical_insights": "No similar cases found in the encrypted database.",
+            "management_outcomes": "N/A",
+            "suggested_next_steps": "Expand search parameters or check local records."
+        }
 
-    prompt = (
-        f"You are a Senior Clinical AI. \n"
-        f"Doctor's Search Query: \"{query}\"\n\n"
-        f"--- EVIDENCE FROM SIMILAR CASES ---\n"
-        f"{evidence_text}\n"
-        f"-----------------------------------\n\n"
-        f"INSTRUCTIONS: \n"
-        f"Analyze the evidence ABOVE cumulatively. Do NOT list cases individually. "
-        f"Identify common patterns across the group. \n"
-        f"Structure your response EXACTLY into these three plain-text sections (no markdown):\n\n"
-        f"[INSIGHTS]\n"
-        f"(Synthesize the most common diagnosis and shared symptoms. e.g., '80% of similar cases presented with...')\n\n"
-        f"[MANAGEMENT]\n"
-        f"(Summarize which treatments yielded the best positive outcomes.)\n\n"
-        f"[NEXT_STEPS]\n"
-        f"(Provide 3 specific clinical recommendations based on the successful outcomes above.)"
-    )
+    evidence_text = "\n".join([
+        f"Case {i+1}: [Diagnosis: {e['encounter'].get('diagnosis')}] [Treatment: {e['encounter'].get('treatment')}] [Outcome: {e['encounter'].get('outcome')}]"
+        for i, e in enumerate(encounters)
+    ])
 
-    
+    prompt = f"""You are a Senior Clinical AI.
+Doctor's Search Query: "{query}"
 
+--- EVIDENCE FROM SIMILAR CASES ---
+{evidence_text}
 
-    # --- OLLAMA (Local) 
-    # try:
-    #     print("Local LLM Active")
-    #     res = requests.post(f"{OLLAMA_BASE}/generate", json={
-    #         "model": CHAT_MODEL, "prompt": prompt, "stream": False
-    #     }, timeout=60)
-        
-    #     full_text = res.json()["response"]
-    #     if "</think>" in full_text: full_text = full_text.split("</think>")[-1]
+INSTRUCTIONS:
+Analyze the evidence ABOVE cumulatively. Identify common patterns.
+Structure your response EXACTLY into these three sections:
 
-    #     insights, management, next_steps = "Analysis pending.", "N/A", "Review cases."
+[INSIGHTS]
+(Synthesize common diagnoses/symptoms)
 
-    #     if "[INSIGHTS]" in full_text:
-    #         parts = full_text.split("[INSIGHTS]")
-    #         if len(parts) > 1: insights = parts[1].split("[MANAGEMENT]")[0].strip()
-    #     if "[MANAGEMENT]" in full_text:
-    #         parts = full_text.split("[MANAGEMENT]")
-    #         if len(parts) > 1: management = parts[1].split("[NEXT_STEPS]")[0].strip()
-    #     if "[NEXT_STEPS]" in full_text:
-    #         parts = full_text.split("[NEXT_STEPS]")
-    #         if len(parts) > 1: next_steps = parts[1].strip()
+[MANAGEMENT]
+(Summarize treatments with positive outcomes)
 
-    #     def clean(text): return text.replace("**", "").replace("##", "").strip()
-    # -----------------------------------------------------------
+[NEXT_STEPS]
+(Provide 3 specific clinical recommendations)"""
+
     try:
-    
-        print("Gemini LLM Active")
-        response = gemini_model.generate_content(prompt)
+        # Modern SDK Call
+        response = genai_client.models.generate_content(
+            model=GEMINI_MODEL_ID,
+            contents=prompt
+        )
         
         full_text = response.text
-
         insights, management, next_steps = "Analysis pending.", "N/A", "Review cases."
 
         if "[INSIGHTS]" in full_text:
-            parts = full_text.split("[INSIGHTS]")
-            if len(parts) > 1: insights = parts[1].split("[MANAGEMENT]")[0].strip()
-        
+            insights = full_text.split("[INSIGHTS]")[1].split("[MANAGEMENT]")[0].strip()
         if "[MANAGEMENT]" in full_text:
-            parts = full_text.split("[MANAGEMENT]")
-            if len(parts) > 1: management = parts[1].split("[NEXT_STEPS]")[0].strip()
-            
+            management = full_text.split("[MANAGEMENT]")[1].split("[NEXT_STEPS]")[0].strip()
         if "[NEXT_STEPS]" in full_text:
-            parts = full_text.split("[NEXT_STEPS]")
-            if len(parts) > 1: next_steps = parts[1].strip()
+            next_steps = full_text.split("[NEXT_STEPS]")[1].strip()
 
         def clean(text): return text.replace("**", "").replace("##", "").strip()
 
@@ -232,7 +194,8 @@ def upsert():
         meta = encrypt_metadata({"hospital_id": d["hospital_id"]})
         vector_index.upsert([{"id": f"encounter:{d['encounter_id']}", "vector": vec, "metadata": {"secure_blob": meta}}])
         return jsonify({"status": "stored"})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e: 
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/search-advanced", methods=["POST"])
 def search():
@@ -240,22 +203,32 @@ def search():
         d = request.json
         q_vec = get_embedding(d.get("query"))
         results = vector_index.query(q_vec, top_k=10)
+        
         matches = []
         for r in results:
-            meta = decrypt_metadata(r.get('metadata', {}).get("secure_blob"))
-            if d.get("scope") == "local" and meta.get("hospital_id") != d.get("hospital_id"): continue
+            secure_blob = r.get('metadata', {}).get("secure_blob")
+            meta = decrypt_metadata(secure_blob)
+            
+            # Scope filtering
+            if d.get("scope") == "local" and meta.get("hospital_id") != d.get("hospital_id"):
+                continue
             
             eid = r['id'].replace("encounter:", "")
-            full = redis_client.get(f"encounter:{eid}")
-            if full:
+            full_data = redis_client.get(f"encounter:{eid}")
+            if full_data:
                 matches.append({
-                    "encounter_id": eid, "hospital_id": meta.get("hospital_id"),
-                    "encounter": json.loads(full), "score": float(r.get('score', r.get('distance', 0.0)))
+                    "encounter_id": eid, 
+                    "hospital_id": meta.get("hospital_id"),
+                    "encounter": json.loads(full_data), 
+                    "score": float(r.get('score', r.get('distance', 0.0)))
                 })
         
-        final = matches[:5]
-        return jsonify({"matches": final, "synthesis": synthesize_answer(d.get("query"), final)})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+        final_matches = matches[:5]
+        synthesis = synthesize_answer(d.get("query"), final_matches)
+        
+        return jsonify({"matches": final_matches, "synthesis": synthesis})
+    except Exception as e: 
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(port=7000)
+    app.run(port=5000, debug=False)

@@ -9,5 +9,5 @@ redis
 requests
 torch
 transformers
-google-generative-ai
+google-genai
 gunicorn
