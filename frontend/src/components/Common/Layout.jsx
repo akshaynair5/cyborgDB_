@@ -1,14 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import api from '../../services/api';
 import {
   LayoutDashboard,
   Users,
   TrendingUp,
   LogOut,
   Menu,
-  X,
   Pill,
   TestTube,
   Image,
@@ -16,6 +14,7 @@ import {
   Search,
   ChevronLeft,
   Activity,
+  Activity as ActivityIcon,
 } from 'lucide-react';
 
 /* ================= ROLE ACCESS CONFIG ================= */
@@ -38,12 +37,7 @@ const ROLE_ACCESS = {
     '/lab-results',
     '/imaging-reports',
   ],
-  staff: [
-    '/dashboard',
-    '/patients',
-    '/search',
-    '/admissions',
-  ],
+  staff: ['/dashboard', '/patients', '/search', '/admissions'],
 };
 
 /* ================= ALL MENU ITEMS ================= */
@@ -65,9 +59,6 @@ const Layout = ({ children }) => {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [headerSearch, setHeaderSearch] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const debounceRef = useRef(null);
 
   /* ================= ROUTE PROTECTION ================= */
   useEffect(() => {
@@ -87,8 +78,8 @@ const Layout = ({ children }) => {
 
   /* ================= FILTER MENU BY ROLE ================= */
   const allowedPaths = ROLE_ACCESS[user?.role] || [];
-  const menuItems = ALL_MENU_ITEMS.filter(item =>
-    allowedPaths.some(p => item.path.startsWith(p))
+  const menuItems = ALL_MENU_ITEMS.filter((item) =>
+    allowedPaths.some((p) => item.path.startsWith(p))
   );
 
   const handleLogout = () => {
@@ -102,18 +93,30 @@ const Layout = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-gray-50">
-
       {/* ================= DESKTOP SIDEBAR ================= */}
       <aside
         className={`${
           sidebarOpen ? 'w-72' : 'w-20'
         } bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white transition-all duration-300 fixed h-full left-0 top-0 z-40 hidden md:flex flex-col`}
       >
-        {/* Logo */}
-        <div className="p-6 flex items-center justify-between border-b border-slate-700">
+        {/* Toggle Button */}
+        <div className="flex justify-end p-2">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 rounded-full bg-slate-700/50 hover:bg-slate-700 transition-transform"
+          >
+            <ChevronLeft
+              size={20}
+              className={`${!sidebarOpen ? 'rotate-180' : ''} transition-transform`}
+            />
+          </button>
+        </div>
+
+        {/* Logo + User */}
+        <div className="p-6 flex flex-col gap-4 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Activity size={22} />
+              <ActivityIcon size={22} />
             </div>
             {sidebarOpen && (
               <div>
@@ -122,33 +125,27 @@ const Layout = ({ children }) => {
               </div>
             )}
           </div>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <ChevronLeft
-              size={20}
-              className={`${!sidebarOpen && 'rotate-180'} transition-transform`}
-            />
-          </button>
-        </div>
 
-        {/* User */}
-        {sidebarOpen && (
-          <div className="p-4 mx-4 mt-4 bg-slate-700 rounded-xl">
-            <p className="font-medium">
-              {user?.firstName} {user?.lastName}
-            </p>
-            <p className="text-xs capitalize text-slate-400">{user?.role}</p>
-          </div>
-        )}
+          {/* User Info */}
+          {sidebarOpen && (
+            <div className="p-4 mx-0 mt-4 bg-slate-700 rounded-xl">
+              <p className="font-medium">
+                {user?.firstName} {user?.lastName}
+              </p>
+              <p className="text-xs capitalize text-slate-400">{user?.role}</p>
+            </div>
+          )}
+        </div>
 
         {/* Nav */}
         <nav className="mt-6 px-3 space-y-1 flex-1 overflow-y-auto no-scrollbar">
-          {menuItems.map(item => {
+          {menuItems.map((item) => {
             const active = isActive(item.path);
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-            className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl ${
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl ${
                   active
                     ? 'bg-blue-600 text-white'
                     : 'hover:bg-slate-700 text-slate-300'
@@ -187,7 +184,7 @@ const Layout = ({ children }) => {
         } transition-transform`}
       >
         <nav className="mt-6 px-3 space-y-1">
-          {menuItems.map(item => (
+          {menuItems.map((item) => (
             <button
               key={item.path}
               onClick={() => {
@@ -227,9 +224,7 @@ const Layout = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 p-4 md:p-6 overflow-auto">
-          {children}
-        </div>
+        <div className="flex-1 p-4 md:p-6 overflow-auto">{children}</div>
       </main>
     </div>
   );
