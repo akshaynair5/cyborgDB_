@@ -12,7 +12,7 @@ This guide explains how to deploy the **CyborgDB Service** (Encrypted Search Eng
 We need a private bridge network so the containers can resolve each other by name.
 
 
-docker network create medsec-net
+###docker network create medsec-net
 
 
 2. Start Redis (The Storage Layer)
@@ -20,7 +20,7 @@ This container acts as the persistent storage "body" for the system.
 
 Bash
 
-docker run -d --name medsec-redis --network medsec-net -p 6379:6379 redis
+###docker run -d --name medsec-redis --network medsec-net -p 6379:6379 redis
 
 
 3. Start CyborgDB (The Encryption Layer)
@@ -37,6 +37,6 @@ docker run -p 8000:8000 --name cyborgdb-service --network medsec-net ^
   ✅ Verification
 Once running, keep the terminal for Step 3 open. You should see logs indicating the service is active:
 
-INFO: Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+###INFO: Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 
 You can now run your Python backend (app.py), and it will automatically connect to this local cloud infrastructure.
