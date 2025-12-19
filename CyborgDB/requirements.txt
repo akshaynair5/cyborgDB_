@@ -1,7 +1,7 @@
+Flask
+flask-cors
 cryptography
 cyborgdb
-Flask
-flask_cors
 numpy
 protobuf
 python-dotenv
@@ -9,4 +9,5 @@ redis
 requests
 torch
 transformers
+google-generative-ai
 gunicorn
