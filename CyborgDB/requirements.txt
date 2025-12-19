@@ -9,5 +9,6 @@ redis
 requests
 torch
 transformers
+sentence-transformers
 google-genai
 gunicorn
