@@ -7,9 +7,6 @@ protobuf
 python-dotenv
 redis
 requests
-torch
-transformers
-sentence-transformers
 google-genai
 gunicorn
 huggingface-hub
