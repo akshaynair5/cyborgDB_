@@ -12,3 +12,4 @@ transformers
 sentence-transformers
 google-genai
 gunicorn
+huggingface-hub
