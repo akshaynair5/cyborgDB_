@@ -1,7 +1,7 @@
 import { Encounter } from '../models/encounter.model.js';
 import ApiError from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
+import { asyncHandler } from '../utils/AsyncHandler.js';
 
 // GET /patients/:id/encounters
 export const getEncountersForPatient = asyncHandler(async (req, res) => {

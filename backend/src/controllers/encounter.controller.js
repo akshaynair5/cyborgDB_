@@ -6,7 +6,7 @@ import { ImagingReport } from "../models/imagingReport.model.js";
 import { Diagnosis } from "../models/diagnosis.model.js";
 import ApiError from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import { asyncHandler } from "../utils/AsyncHandler.js";
 import cyborgClient from "../utils/cyborg.client.js";
 import mongoose from "mongoose";
 

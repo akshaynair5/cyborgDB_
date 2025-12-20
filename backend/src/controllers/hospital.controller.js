@@ -1,7 +1,7 @@
 import { Hospital } from "../models/hospital.model.js";
 import ApiError from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import { asyncHandler } from "../utils/AsyncHandler.js";
 
 
 export const createHospital = asyncHandler(async (req, res) => {

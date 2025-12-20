@@ -2,7 +2,7 @@ import { Patient } from "../models/patient.model.js";
 import { Counter } from "../models/counter.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import ApiError from "../utils/ApiError.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import { asyncHandler } from "../utils/AsyncHandler.js";
 
 
 export const createPatient = asyncHandler(async (req, res) => {

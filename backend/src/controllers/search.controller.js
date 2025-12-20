@@ -3,7 +3,7 @@ import { Encounter } from '../models/encounter.model.js';
 import { LabResult } from '../models/labResult.model.js';
 import { ImagingReport } from '../models/imagingReport.model.js';
 import { Prescription } from '../models/prescription.model.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
+import { asyncHandler } from '../utils/AsyncHandler.js';
 import ApiError from '../utils/ApiError.js';
 
 // Simple local search across common collections scoped to req.user.hospital
