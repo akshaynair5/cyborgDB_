@@ -174,24 +174,105 @@ except Exception as e:
 # AUTO SEED
 # =========================
 def seed_database():
+    """
+    Seeds demo encounters into Redis and CyborgDB with full structured payloads.
+    """
     logger.info("🌱 Seeding demo encounters...")
+
     batch = []
 
     for case in MOCK_DATA:
-        text = f"{case['payload']['diagnosis']} {case['payload']['chief_complaint']}"
+        # Build a full encounter payload
+        payload = {
+            "_id": case["encounter_id"],
+            "encounterType": "outpatient",
+            "hospital": case["hospital_id"],
+            "startedAt": case["raw_encounter"].get("encounter_date"),
+            "endedAt": case["raw_encounter"].get("encounter_date"),
+            "createdAt": datetime.utcnow().isoformat(),
+            "updatedAt": datetime.utcnow().isoformat(),
+            "chiefComplaint": case["raw_encounter"].get("chief_complaint"),
+            "diagnoses": case["summary"].get("diagnoses", []),
+            "diagnosis": ", ".join(case["summary"].get("diagnoses", [])),
+            "treatment": case["raw_encounter"].get("treatment"),
+            "outcome": case["raw_encounter"].get("outcome"),
+            "plan_and_outcome": case["summary"].get("plan_and_outcome"),
+            "medications": case["summary"].get("medications", []),
+            "vitals": {
+                "temperatureC": None,
+                "pulse": None,
+                "respiratoryRate": None,
+                "systolicBP": None,
+                "diastolicBP": None,
+                "spo2": None,
+                "heightCm": None,
+                "weightKg": None
+            },
+            "patient": {
+                "_id": f"PAT_{case['encounter_id']}",
+                "firstName": "Demo",
+                "lastName": "Patient",
+                "dob": "1990-01-01T00:00:00.000Z",
+                "gender": "unknown",
+                "bloodGroup": None,
+                "allergies": [],
+                "chronicConditions": [],
+                "phone": "",
+                "hospital": case["hospital_id"],
+                "hospitalId": f"HOSP_{case['hospital_id']}"
+            },
+            "prescriptions": [
+                {
+                    "_id": f"RX_{case['encounter_id']}_1",
+                    "hospital": case["hospital_id"],
+                    "patient": f"PAT_{case['encounter_id']}",
+                    "items": [
+                        {
+                            "name": med,
+                            "dosage": "500 mg",
+                            "frequency": "Once daily",
+                            "durationDays": 5,
+                            "quantity": 5,
+                            "instructions": "Take after meals"
+                        } for med in case["summary"].get("medications", [])
+                    ],
+                    "notes": "Follow prescription instructions",
+                    "createdAt": datetime.utcnow().isoformat(),
+                    "prescribedBy": "DOCTOR_001"
+                }
+            ],
+            "seenBy": {
+                "_id": "DOCTOR_001",
+                "firstName": "Demo",
+                "lastName": "Doctor",
+                "role": "doctor"
+            },
+            "examination": "N/A",
+            "historyOfPresentIllness": case["raw_encounter"].get("chief_complaint"),
+            "imaging": [],
+            "labs": [],
+            "notes": "Demo notes",
+            "abnormal_labs": [],
+            "imaging_findings": [],
+            "key_findings": "N/A",
+            "narrative_summary": f"{case['summary'].get('chief_complaint')} - {case['summary'].get('plan_and_outcome')}"
+        }
+
+        # Create searchable text for CyborgDB
+        text = f"{payload['diagnosis']} {payload['chiefComplaint']} {' '.join(payload['medications'])}"
         meta = encrypt_metadata({"hospital_id": case["hospital_id"]})
 
-        redis_client.set(
-            f"encounter:{case['encounter_id']}",
-            json.dumps(case["payload"])
-        )
+        # Save to Redis
+        redis_client.set(f"encounter:{case['encounter_id']}", json.dumps(payload))
 
+        # Prepare batch for CyborgDB upsert
         batch.append({
             "id": f"encounter:{case['encounter_id']}",
             "contents": text,
             "metadata": {"secure_blob": meta}
         })
 
+    # Upsert into CyborgDB
     cyborgdb_upsert(batch)
     logger.info(f"✨ Seeded {len(batch)} encounters")
 
