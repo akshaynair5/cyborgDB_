@@ -80,10 +80,6 @@ const ImagingForm = lazy(() =>
   import('./components/Imaging/ImagingForm').then(m => ({ default: m.ImagingForm }))
 );
 
-// Settings & Profile
-const Settings = lazy(() =>
-  import('./pages/settings').then(m => ({ default: m.Settings }))
-);
 const Profile = lazy(() =>
   import('./pages/Profile').then(m => ({ default: m.Profile }))
 );
@@ -176,8 +172,7 @@ const routeConfig = [
   { path: '/imaging-reports/new', element: <ImagingForm />, roles: ['admin', 'doctor', 'radiologist'] },
   { path: '/imaging-reports/:id/edit', element: <ImagingForm />, roles: ['admin', 'doctor', 'radiologist'] },
 
-  // Settings & Profile
-  { path: '/settings', element: <Settings />, roles: ['admin'] },
+  // Profile
   { path: '/profile', element: <Profile />, roles: ['admin', 'doctor', 'nurse'] },
 ];
 
