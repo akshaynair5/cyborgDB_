@@ -392,7 +392,7 @@ Plan & Outcome:
 {normalized.get("plan_and_outcome", "-")}
 """
 
-    # 4. Encrypt metadata (🔥 FIXED)
+    # 4. Encrypt metadata 
     meta = encrypt_metadata({
         "hospital_id": hospital_id,
         "encounter_id": encounter_id
@@ -466,7 +466,7 @@ def search():
         enc_data = json.loads(enc_data)
 
         # 5️⃣ Flatten encounter: combine raw_encounter + summary for consistent format
-        raw = enc_data.get("raw_encounter", enc_data)  # fallback for old format
+        raw = enc_data.get("raw_encounter", enc_data)  
         summary = enc_data.get("summary", {})
         flattened_encounter = {**raw, **summary}
 
