@@ -12,6 +12,8 @@ from google import genai
 from load_demo_data import MOCK_DATA
 import os
 import requests
+import time
+from datetime import datetime
 
 # -------------------------------------------
 dotenv.load_dotenv()
