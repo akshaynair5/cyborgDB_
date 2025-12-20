@@ -110,7 +110,7 @@ const normalizeEncounterForForm = (encounter, user) => {
         api.getUsersByRoles(['doctor', 'nurse']),
       ]);
       const pts = patientsRes?.data?.message?.patients || patientsRes?.data?.patients || patientsRes?.data || [];
-      const us = usersRes?.data?.data?.users || usersRes?.data?.users || usersRes?.data || [];
+      const us = usersRes?.data?.message?.users || usersRes?.data?.users || usersRes?.data || [];
       setPatients(pts);
       setUsers(us);
     } catch (error) {
@@ -204,7 +204,7 @@ const handleSubmit = async (values) => {
       const res = await api.createDiagnosis(payload);
 
       const diagId =
-        res?.data?.data?.diagnosis?._id ||
+        res?.data?.message?.diagnosis?._id ||
         res?.data?.diagnosis?._id ||
         res?.data?.message?.diagnosis?._id ||
         res?.data?._id;
@@ -275,7 +275,7 @@ const handleSubmit = async (values) => {
       const labId =
         res?.data?.data?.labResult?._id ||
         res?.data?.labResult?._id ||
-        res?.data?.message?.labResult?._id ||
+        res?.data?.message?.lab?._id ||
         res?.data?._id;
 
       if (labId) {
@@ -304,7 +304,7 @@ const handleSubmit = async (values) => {
       const imgId =
         res?.data?.data?.imagingReport?._id ||
         res?.data?.imagingReport?._id ||
-        res?.data?.message?.imagingReport?._id ||
+        res?.data?.message?.imaging?._id ||
         res?.data?._id;
 
       if (imgId) {

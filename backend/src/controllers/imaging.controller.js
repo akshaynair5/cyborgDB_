@@ -17,9 +17,9 @@ export const createImagingReport = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Patient not found");
   }
 
-  if (!data.encounter) {
-    throw new ApiError(400, "Encounter ID is required for imaging report");
-  }
+  // if (!data.encounter) {
+  //   throw new ApiError(400, "Encounter ID is required for imaging report");
+  // }
 
   const imaging = await ImagingReport.create(data);
 
@@ -51,9 +51,12 @@ export const getImagingReports = asyncHandler(async (req, res) => {
     patientName: item.patient
       ? `${item.patient.firstName} ${item.patient.lastName}`
       : "Unknown",
-    imagingType: item.imagingType || "-",
     resultSummary: item.resultSummary || "N/A",
-    createdAt: item.createdAt
+    createdAt: item.createdAt,
+    modality: item.modality || "N/A",
+    performedAt: item.performedAt || "N/A",
+    report: item.report || "N/A",
+    reportedAt: item.reportedAt || "N/A",
   }));
 
   return res.status(200).json(

@@ -85,7 +85,8 @@ export const ImagingForm = () => {
         await api.updateImagingReport(id, values);
         toast.success('Imaging report updated successfully');
       } else {
-        await api.createImagingReport(values);
+        const res = await api.createImagingReport(values);
+        console.log(res.data);
         toast.success('Imaging report created successfully');
       }
       navigate('/imaging-reports');
@@ -153,12 +154,22 @@ export const ImagingForm = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Imaging Type</label>
                   <Field type="text" name="imagingType" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Chest X-ray, CT Abdomen" />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Modality</label>
-                  <Field type="text" name="modality" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., XR, CT, MRI" />
+                  <Field
+                    as="select"
+                    name="modality"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select a Modality</option>
+                    <option value="XRAY">XRAY</option>
+                    <option value="USG">USG</option>
+                    <option value="CT">CT</option>
+                    <option value="MRI">MRI</option>
+                    <option value="ECG">ECG</option>
+                    <option value="OTHER">OTHER</option>
+                  </Field>
                 </div>
-
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Report</label>
                   <Field as="textarea" name="report" rows={6} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Detailed report..." />

@@ -178,7 +178,7 @@ const routeConfig = [
 
   // Settings & Profile
   { path: '/settings', element: <Settings />, roles: ['admin'] },
-  { path: '/profile', element: <Profile />, roles: [] },
+  { path: '/profile', element: <Profile />, roles: ['admin', 'doctor', 'nurse'] },
 ];
 
 /* ===========================

@@ -115,7 +115,8 @@ export const LabResultForm = () => {
       await api.updateLabResult(id, payload);
       toast.success('Lab result updated successfully');
     } else {
-      await api.createLabResult(payload);
+      let res = await api.createLabResult(payload);
+      console.log(res.data);
       toast.success('Lab result created successfully');
     }
 

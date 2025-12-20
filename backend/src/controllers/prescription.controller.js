@@ -39,26 +39,43 @@ export const createPrescription = asyncHandler(async (req, res) => {
    ========================================================= */
 export const getPrescriptions = asyncHandler(async (req, res) => {
   const prescriptions = await Prescription.find({
-    hospital: req.user.hospital
+    hospital: req.user.hospital,
   })
     .populate("patient", "firstName lastName")
-    .populate("items")
     .populate("prescribedBy", "firstName lastName")
     .sort({ createdAt: -1 });
 
-  // 🔥 Transform for frontend table
   const formatted = prescriptions.map((p) => ({
     _id: p._id,
-    patientName: p.patient
-      ? `${p.patient.firstName} ${p.patient.lastName}`
-      : "Unknown",
-    prescribedByName: p.prescribedBy
-      ? `${p.prescribedBy.firstName} ${p.prescribedBy.lastName}`
-      : "Unknown",
-    medication: p.items?.[0]?.medication || "-",
-    dosage: p.items?.[0]?.dosage || "-",
-    frequency: p.items?.[0]?.frequency || "-",
-    createdAt: p.createdAt
+
+    patient: p.patient
+      ? {
+          _id: p.patient._id,
+          firstName: p.patient.firstName,
+          lastName: p.patient.lastName,
+        }
+      : null,
+
+    prescribedBy: p.prescribedBy
+      ? {
+          _id: p.prescribedBy._id,
+          firstName: p.prescribedBy.firstName,
+          lastName: p.prescribedBy.lastName,
+        }
+      : null,
+
+    items: p.items.map((item) => ({
+      name: item.name,
+      dosage: item.dosage,
+      frequency: item.frequency,
+      durationDays: item.durationDays,
+      instructions: item.instructions,
+      quantity: item.quantity,
+      notes: item.notes,
+    })),
+
+    encounter: p.encounter,
+    createdAt: p.createdAt,
   }));
 
   return res.status(200).json(

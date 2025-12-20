@@ -4,72 +4,65 @@ import toast from 'react-hot-toast';
 import { Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+/* =====================================================
+   COMPONENT
+===================================================== */
 export const PrescriptionList = () => {
   const navigate = useNavigate();
 
-  const [rows, setRows] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  // Modal states
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
 
-  useEffect(() => {
-    fetchPrescriptions();
-  }, []);
+  /* =====================================================
+     NORMALIZER (API → UI SHAPE)
+  ===================================================== */
+  const normalizePrescriptions = (rows = []) =>
+    rows.map((p) => ({
+      _id: p._id,
 
-  useEffect(() => {
-    const q = search.toLowerCase();
-    const result = rows.filter((p) => {
-      return (
-        q === '' ||
-        p.patientName?.toLowerCase().includes(q) ||
-        p.medication?.toLowerCase().includes(q) ||
-        p.prescribedByName?.toLowerCase().includes(q)
-      );
-    });
-    setFiltered(result);
-  }, [search, rows]);
+      patient: p.patient
+        ? {
+            _id: p.patient._id,
+            firstName: p.patient.firstName,
+            lastName: p.patient.lastName,
+          }
+        : null,
 
+      prescribedBy: p.prescribedBy
+        ? {
+            _id: p.prescribedBy._id,
+            firstName: p.prescribedBy.firstName,
+            lastName: p.prescribedBy.lastName,
+          }
+        : null,
+
+      items: p.items || [],
+      encounter: p.encounter,
+      createdAt: p.createdAt,
+    }));
+
+  /* =====================================================
+     FETCH
+  ===================================================== */
   const fetchPrescriptions = async () => {
     try {
       const res = await api.getPrescriptions();
+      console.log('Prescriptions fetched:', res?.data);
 
-      let list =
-        res?.data?.message?.prescriptions ||
+      const raw =
         res?.data?.prescriptions ||
+        res?.data?.message?.prescriptions ||
         [];
 
-      const mappedList = list.map((p) => ({
-        _id: p._id,
-        patientName:
-          p.patientName ||
-          (p.patient?.firstName && p.patient?.lastName
-            ? `${p.patient.firstName} ${p.patient.lastName}`
-            : 'Unknown'),
-        prescribedByName:
-          p.prescribedByName ||
-          (p.prescribedBy?.firstName && p.prescribedBy?.lastName
-            ? `${p.prescribedBy.firstName} ${p.prescribedBy.lastName}`
-            : '-'),
-        medication:
-          p.medication ||
-          (p.items?.map((i) => i.name).join(', ') || '-'),
-        dosage:
-          p.dosage ||
-          (p.items?.map((i) => i.dosage).join(', ') || '-'),
-        frequency:
-          p.frequency ||
-          (p.items?.map((i) => i.frequency).join(', ') || '-'),
-        createdAt: p.createdAt || null,
-      }));
-
-      setRows(mappedList);
-      setFiltered(mappedList);
+      const normalized = normalizePrescriptions(raw);
+      setPrescriptions(normalized);
+      setFiltered(normalized);
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch prescriptions');
@@ -78,6 +71,45 @@ export const PrescriptionList = () => {
     }
   };
 
+  useEffect(() => {
+    fetchPrescriptions();
+  }, []);
+
+  /* =====================================================
+     SEARCH
+  ===================================================== */
+  useEffect(() => {
+    const q = search.toLowerCase();
+
+    if (!q) {
+      setFiltered(prescriptions);
+      return;
+    }
+
+    setFiltered(
+      prescriptions.filter((p) => {
+        const patientName =
+          `${p.patient?.firstName || ''} ${p.patient?.lastName || ''}`.toLowerCase();
+
+        const prescriberName =
+          `${p.prescribedBy?.firstName || ''} ${p.prescribedBy?.lastName || ''}`.toLowerCase();
+
+        const meds = p.items
+          .map((i) => i.name.toLowerCase())
+          .join(' ');
+
+        return (
+          patientName.includes(q) ||
+          prescriberName.includes(q) ||
+          meds.includes(q)
+        );
+      })
+    );
+  }, [search, prescriptions]);
+
+  /* =====================================================
+     ACTIONS
+  ===================================================== */
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this prescription?')) return;
 
@@ -85,21 +117,23 @@ export const PrescriptionList = () => {
       await api.deletePrescription(id);
       toast.success('Prescription deleted');
       fetchPrescriptions();
-    } catch {
+    } catch (err) {
+      console.error(err);
       toast.error('Delete failed');
     }
   };
 
   const openModal = async (id) => {
-    setSelectedId(id);
     setModalOpen(true);
     setModalLoading(true);
+
     try {
       const res = await api.getPrescriptionById(id);
       const presc =
-        res?.data?.message?.prescription ||
         res?.data?.prescription ||
+        res?.data?.message?.prescription ||
         res?.data;
+
       setSelectedPrescription(presc);
     } catch (err) {
       console.error(err);
@@ -109,6 +143,9 @@ export const PrescriptionList = () => {
     }
   };
 
+  /* =====================================================
+     RENDER
+  ===================================================== */
   if (loading) {
     return <div className="text-center py-10 text-lg">Loading...</div>;
   }
@@ -147,9 +184,7 @@ export const PrescriptionList = () => {
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold">Medication</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold">Dosage</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold">Frequency</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Medications</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Prescribed By</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Date</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
@@ -160,12 +195,28 @@ export const PrescriptionList = () => {
             {filtered.length > 0 ? (
               filtered.map((p) => (
                 <tr key={p._id} className="border-b hover:bg-gray-50">
-                  <td className="px-6 py-4">{p.patientName}</td>
-                  <td className="px-6 py-4">{p.medication}</td>
-                  <td className="px-6 py-4">{p.dosage}</td>
-                  <td className="px-6 py-4">{p.frequency}</td>
-                  <td className="px-6 py-4">{p.prescribedByName}</td>
-                  <td className="px-6 py-4">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '-'}</td>
+                  <td className="px-6 py-4">
+                    {p.patient
+                      ? `${p.patient.firstName} ${p.patient.lastName}`
+                      : 'Unknown'}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    {p.items.map((i) => i.name).join(', ')}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    {p.prescribedBy
+                      ? `${p.prescribedBy.firstName} ${p.prescribedBy.lastName}`
+                      : '-'}
+                  </td>
+
+                  <td className="px-6 py-4">
+                    {p.createdAt
+                      ? new Date(p.createdAt).toLocaleDateString()
+                      : '-'}
+                  </td>
+
                   <td className="px-6 py-4">
                     <div className="flex gap-3">
                       <button
@@ -174,12 +225,14 @@ export const PrescriptionList = () => {
                       >
                         <Eye size={18} />
                       </button>
+
                       <button
                         onClick={() => navigate(`/prescriptions/${p._id}/edit`)}
                         className="text-green-600"
                       >
                         <Edit size={18} />
                       </button>
+
                       <button
                         onClick={() => handleDelete(p._id)}
                         className="text-red-600"
@@ -192,7 +245,7 @@ export const PrescriptionList = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="7" className="px-6 py-6 text-center text-gray-500">
+                <td colSpan="5" className="px-6 py-6 text-center text-gray-500">
                   No prescriptions found
                 </td>
               </tr>
@@ -201,10 +254,10 @@ export const PrescriptionList = () => {
         </table>
       </div>
 
-      {/* Modal */}
+      {/* ================= MODAL ================= */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg max-w-3xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
             <button
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
               onClick={() => setModalOpen(false)}
@@ -216,38 +269,51 @@ export const PrescriptionList = () => {
               <div className="text-center py-10">Loading...</div>
             ) : selectedPrescription ? (
               <div className="space-y-4">
-                <h2 className="text-2xl font-bold mb-2">Prescription Details</h2>
-                <div><strong>Patient:</strong> {selectedPrescription.patient?.firstName ? `${selectedPrescription.patient.firstName} ${selectedPrescription.patient.lastName}` : 'Unknown'}</div>
-                <div><strong>Prescribed By:</strong> {selectedPrescription.prescribedBy?.firstName ? `${selectedPrescription.prescribedBy.firstName} ${selectedPrescription.prescribedBy.lastName}` : 'Unknown'}</div>
-                <div><strong>Date:</strong> {selectedPrescription.createdAt ? new Date(selectedPrescription.createdAt).toLocaleDateString() : '-'}</div>
-                <div><strong>Notes:</strong> {selectedPrescription.notes || '-'}</div>
+                <h2 className="text-2xl font-bold">Prescription Details</h2>
 
-                {selectedPrescription.items?.length > 0 && (
-                  <table className="w-full mt-2 border border-gray-200 rounded-lg overflow-hidden">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-sm font-semibold">Name</th>
-                        <th className="px-3 py-2 text-left text-sm font-semibold">Dosage</th>
-                        <th className="px-3 py-2 text-left text-sm font-semibold">Frequency</th>
-                        <th className="px-3 py-2 text-left text-sm font-semibold">Duration</th>
-                        <th className="px-3 py-2 text-left text-sm font-semibold">Instructions</th>
-                        <th className="px-3 py-2 text-left text-sm font-semibold">Quantity</th>
+                <p>
+                  <strong>Patient:</strong>{' '}
+                  {selectedPrescription.patient
+                    ? `${selectedPrescription.patient.firstName} ${selectedPrescription.patient.lastName}`
+                    : 'Unknown'}
+                </p>
+
+                <p>
+                  <strong>Prescribed By:</strong>{' '}
+                  {selectedPrescription.prescribedBy
+                    ? `${selectedPrescription.prescribedBy.firstName} ${selectedPrescription.prescribedBy.lastName}`
+                    : 'Unknown'}
+                </p>
+
+                <p>
+                  <strong>Date:</strong>{' '}
+                  {new Date(selectedPrescription.createdAt).toLocaleDateString()}
+                </p>
+
+                <table className="w-full mt-4 border border-gray-200 rounded-lg overflow-hidden">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-sm">Medicine</th>
+                      <th className="px-3 py-2 text-left text-sm">Dosage</th>
+                      <th className="px-3 py-2 text-left text-sm">Frequency</th>
+                      <th className="px-3 py-2 text-left text-sm">Duration</th>
+                      <th className="px-3 py-2 text-left text-sm">Instructions</th>
+                      <th className="px-3 py-2 text-left text-sm">Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPrescription.items.map((item, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="px-3 py-2">{item.name}</td>
+                        <td className="px-3 py-2">{item.dosage}</td>
+                        <td className="px-3 py-2">{item.frequency}</td>
+                        <td className="px-3 py-2">{item.durationDays} days</td>
+                        <td className="px-3 py-2">{item.instructions}</td>
+                        <td className="px-3 py-2">{item.quantity}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {selectedPrescription.items.map((item, idx) => (
-                        <tr key={idx} className="border-t">
-                          <td className="px-3 py-2">{item.name}</td>
-                          <td className="px-3 py-2">{item.dosage}</td>
-                          <td className="px-3 py-2">{item.frequency}</td>
-                          <td className="px-3 py-2">{item.durationDays}</td>
-                          <td className="px-3 py-2">{item.instructions}</td>
-                          <td className="px-3 py-2">{item.quantity}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div className="text-center py-10 text-gray-500">No data</div>

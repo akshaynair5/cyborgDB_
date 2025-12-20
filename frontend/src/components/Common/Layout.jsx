@@ -28,6 +28,7 @@ const ROLE_ACCESS = {
     '/prescriptions',
     '/lab-results',
     '/imaging-reports',
+    '/profile',
   ],
   nurse: [
     '/dashboard',
@@ -36,9 +37,29 @@ const ROLE_ACCESS = {
     '/search',
     '/lab-results',
     '/imaging-reports',
+    '/profile',
   ],
-  staff: ['/dashboard', '/patients', '/search', '/admissions'],
+  staff: [
+    '/dashboard',
+    '/patients',
+    '/search',
+    '/admissions',
+    '/profile',
+  ],
+  admin: [
+    '/dashboard',
+    '/patients',
+    '/encounters',
+    '/search',
+    '/admissions',
+    '/prescriptions',
+    '/lab-results',
+    '/imaging-reports',
+    '/settings',
+    '/profile',
+  ],
 };
+
 
 /* ================= ALL MENU ITEMS ================= */
 const ALL_MENU_ITEMS = [
@@ -128,12 +149,15 @@ const Layout = ({ children }) => {
 
           {/* User Info */}
           {sidebarOpen && (
-            <div className="p-4 mx-0 mt-4 bg-slate-700 rounded-xl">
+            <button
+              onClick={() => navigate('/profile')}
+              className="p-4 mx-0 mt-4 bg-slate-700 rounded-xl text-left hover:bg-slate-600 transition"
+            >
               <p className="font-medium">
                 {user?.firstName} {user?.lastName}
               </p>
               <p className="text-xs capitalize text-slate-400">{user?.role}</p>
-            </div>
+            </button>
           )}
         </div>
 

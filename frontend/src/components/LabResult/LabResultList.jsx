@@ -23,32 +23,28 @@ export const LabResultList = () => {
      NORMALIZER (API → UI SHAPE)
   ===================================================== */
   const normalizeLabs = (rows = []) =>
-    rows.map((r) => {
-      const nameParts = (r.patientName || '').split(' ');
+    rows.map((r) => ({
+      _id: r._id,
 
-      return {
-        _id: r._id,
+      patient: {
+        // Replace later with populated patient data if available
+        firstName: r.patient?.firstName || 'Patient',
+        lastName: r.patient?.lastName || 'Unknown',
+      },
 
-        patient: {
-          firstName: nameParts[0] || '',
-          lastName: nameParts.slice(1).join(' ') || '',
-        },
+      status: r.status || 'reported',
+      collectedAt: r.collectedAt,
+      reportedAt: r.reportedAt,
 
-        status: 'completed',
-        collectedAt: r.createdAt,
-        reportedAt: r.createdAt,
-
-        tests: [
-          {
-            testName: r.testName || '-',
-            value: r.resultValue || '-',
-            units: '',
-            referenceRange: '',
-            flagged: false,
-          },
-        ],
-      };
-    });
+      tests: (r.tests || []).map((t) => ({
+        testName: t.testName,
+        value: t.value,
+        units: t.units,
+        referenceRange: t.referenceRange,
+        flagged: t.flagged,
+        status: t.status,
+      })),
+    }));
 
   /* =====================================================
      FETCH
@@ -184,19 +180,22 @@ export const LabResultList = () => {
                 lab.tests.map((test, idx) => (
                   <tr key={`${lab._id}-${idx}`} className="border-b hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium">
-                      {lab.patient.firstName
-                        ? `${lab.patient.firstName} ${lab.patient.lastName}`
-                        : 'N/A'}
+                      {`${lab.patient.firstName} ${lab.patient.lastName}`}
                     </td>
 
                     <td className="px-6 py-4">{test.testName}</td>
 
                     <td className="px-6 py-4 text-gray-700">
-                      {test.value || '—'}
+                      {test.value} {test.units}
+                      {test.flagged && (
+                        <span className="ml-2 text-red-500 font-semibold">
+                          ⚠
+                        </span>
+                      )}
                     </td>
 
                     <td className="px-6 py-4 capitalize text-gray-500">
-                      {lab.status}
+                      {test.status || lab.status}
                     </td>
 
                     <td className="px-6 py-4 text-gray-500">
@@ -258,7 +257,12 @@ export const LabResultList = () => {
               </p>
 
               <p><strong>Test:</strong> {selectedTest.testName}</p>
-              <p><strong>Status:</strong> {selectedLab.status}</p>
+              <p><strong>Status:</strong> {selectedTest.status}</p>
+
+              <p>
+                <strong>Collected At:</strong>{' '}
+                {new Date(selectedLab.collectedAt).toLocaleString()}
+              </p>
 
               <p>
                 <strong>Reported At:</strong>{' '}
@@ -269,9 +273,14 @@ export const LabResultList = () => {
             <hr className="my-4" />
 
             <div className="space-y-2">
-              <p>
-                <strong>Result:</strong> {selectedTest.value}
-              </p>
+              <p><strong>Value:</strong> {selectedTest.value} {selectedTest.units}</p>
+              <p><strong>Reference Range:</strong> {selectedTest.referenceRange}</p>
+
+              {selectedTest.flagged && (
+                <p className="text-red-600 font-semibold">
+                  ⚠ Abnormal Result
+                </p>
+              )}
             </div>
           </div>
         </div>

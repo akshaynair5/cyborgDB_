@@ -18,9 +18,9 @@ export const createLabResult = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Patient not found");
   }
 
-  if (!data.encounter) {
-    throw new ApiError(400, "Encounter ID is required for lab result");
-  }
+  // if (!data.encounter) {
+  //   throw new ApiError(400, "Encounter ID is required for lab result");
+  // }
 
   const lab = await LabResult.create(data);
 
@@ -35,26 +35,38 @@ export const createLabResult = asyncHandler(async (req, res) => {
   );
 });
 
-/* =========================================================
-   GET ALL LAB RESULTS (FOR LIST PAGE)
-   👉 Used by LabList.jsx
-   ========================================================= */
 export const getLabResults = asyncHandler(async (req, res) => {
   const labs = await LabResult.find({
-    hospital: req.user.hospital
+    hospital: req.user.hospital,
   })
     .populate("patient", "firstName lastName")
     .sort({ createdAt: -1 });
 
-  // 🔥 Transform for frontend table
   const labResults = labs.map((lab) => ({
     _id: lab._id,
-    patientName: lab.patient
-      ? `${lab.patient.firstName} ${lab.patient.lastName}`
-      : "Unknown",
-    testName: lab.testName || lab.test || "-",
-    resultValue: lab.resultValue || "-",
-    createdAt: lab.createdAt
+
+    patient: lab.patient
+      ? {
+          _id: lab.patient._id,
+          firstName: lab.patient.firstName,
+          lastName: lab.patient.lastName,
+        }
+      : null,
+
+    status: lab.status || "reported",
+    collectedAt: lab.collectedAt,
+    reportedAt: lab.reportedAt,
+
+    tests: lab.tests.map((test) => ({
+      testName: test.testName,
+      value: test.value,
+      units: test.units,
+      referenceRange: test.referenceRange,
+      flagged: test.flagged,
+      status: test.status,
+    })),
+
+    createdAt: lab.createdAt,
   }));
 
   return res.status(200).json(

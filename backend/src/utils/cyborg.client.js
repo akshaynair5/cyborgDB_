@@ -1,6 +1,6 @@
 import ApiError from './ApiError.js';
 
-const CYBORG_URL = process.env.CYBORG_MICROSERVICE_URL || process.env.CYBORG_URL || 'http://localhost:8000';
+const CYBORG_URL = process.env.VITE_CYBORG_DB_URL || process.env.CYBORG_URL || 'http://127.0.0.1:7000';
 
 let _fetch = global.fetch;
 async function getFetch() {
@@ -12,13 +12,16 @@ async function getFetch() {
 }
 
 export async function upsertEncounter(encounter) {
+  console.log('cyborg.client.upsertEncounter called');
+
   try {
     const fetch = await getFetch();
     const url = `${CYBORG_URL.replace(/\/$/, '')}/upsert-encounter`;
+
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ encounter }),
+      body: JSON.stringify(encounter), 
       timeout: 5000
     });
 
@@ -29,10 +32,13 @@ export async function upsertEncounter(encounter) {
 
     return await res.json();
   } catch (err) {
-    // don't throw network failures up to the client for now; log and return null
-    console.warn('cyborg.client.upsertEncounter error', err && err.message ? err.message : err);
+    console.warn(
+      'cyborg.client.upsertEncounter error',
+      err?.message || err
+    );
     return null;
   }
 }
+
 
 export default { upsertEncounter };

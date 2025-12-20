@@ -2,26 +2,25 @@ from flask import Flask, request, jsonify
 import redis
 import json
 import logging
-import numpy as np
 import time
 from cryptography.fernet import Fernet
 import cyborgdb
 from flask_cors import CORS
 from cyborgdb.openapi_client.models import IndexIVFFlatModel
 import dotenv
-import google.generativeai as genai
+from google import genai
 from load_demo_data import MOCK_DATA
 import os
-from huggingface_hub import InferenceClient
+import requests
 
 # -------------------------------------------
 dotenv.load_dotenv()
 
 # =========================
-# LOGGING (MUST COME EARLY)
+# LOGGING
 # =========================
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("medsec-hf")
+logger = logging.getLogger("medsec-autoembed")
 
 # =========================
 # CONFIG
@@ -29,39 +28,26 @@ logger = logging.getLogger("medsec-hf")
 CONSORTIUM_KEY = b'20siSj50fTPrCndwzj_Da45JlrN4vwDfT3GcsGYlYwQ='
 cipher_suite = Fernet(CONSORTIUM_KEY)
 
-BERT_MODEL_NAME = "emilyalsentzer/Bio_ClinicalBERT"
-
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-hf_client = InferenceClient(
-    provider="hf-inference",
-    api_key=HF_TOKEN
-)
-
-logger.info("✅ Hugging Face InferenceClient initialized")
-
 INDEX_NAME = os.getenv("INDEX_NAME", "medsec-final-v4")
-index_key_bytes = bytes.fromhex(
+INDEX_KEY_BYTES = bytes.fromhex(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 )
+
+CYBORG_API_KEY = os.getenv("CYBORGDB_API_KEY")
+CYBORGDB_URL = os.getenv("CYBORGDB_URL")
+
+REDIS_URL = os.getenv("REDIS_URL")
 
 # =========================
 # CLIENTS
 # =========================
-CYBORG_API_KEY = os.getenv("CYBORGDB_API_KEY")
-CYBORGDB_URL = os.getenv("CYBORGDB_URL")
 vector_client = cyborgdb.Client(CYBORGDB_URL, api_key=CYBORG_API_KEY)
-
-REDIS_URL = os.getenv("REDIS_URL")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # =========================
 # GEMINI
 # =========================
-GEMINI_MODEL = "gemini-2.5-flash"
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel(GEMINI_MODEL)
+genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # =========================
 # APP
@@ -69,40 +55,88 @@ gemini_model = genai.GenerativeModel(GEMINI_MODEL)
 app = Flask(__name__)
 CORS(app)
 
-logger.info("✅ Using Hugging Face Hosted ClinicalBERT")
+# =========================
+# CYBORGDB REST
+# =========================
+HEADERS = {
+    "X-API-Key": CYBORG_API_KEY,
+    "Content-Type": "application/json"
+}
 
-# =========================
-# HELPERS
-# =========================
-def get_embedding(text: str):
-    """
-    Hugging Face Hosted Bio_ClinicalBERT
-    Returns normalized 768-d vector
-    """
-    embeddings = hf_client.feature_extraction(
-        model=BERT_MODEL_NAME,
-        text=text
+def cyborgdb_upsert(items):
+    payload = {
+        "index_name": INDEX_NAME,
+        "index_key": INDEX_KEY_BYTES.hex(),
+        "items": items
+    }
+
+    headers = {
+        "X-API-Key": CYBORG_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    resp = requests.post(
+        f"{CYBORGDB_URL}/v1/vectors/upsert",
+        headers=headers,
+        json=payload,
+        timeout=120
     )
 
-    embeddings = np.array(embeddings)
+    if resp.status_code != 200:
+        raise RuntimeError(resp.text)
 
-    # HF returns [tokens, hidden] or [1, tokens, hidden]
-    if embeddings.ndim == 3:
-        embeddings = embeddings.mean(axis=1)[0]
-    elif embeddings.ndim == 2:
-        embeddings = embeddings.mean(axis=0)
+    return resp.json()
 
-    # Normalize
-    norm = np.linalg.norm(embeddings)
-    if norm > 0:
-        embeddings = embeddings / norm
+def delete_index_rest(index_name: str, index_key: str):
+    url = f"{CYBORGDB_URL}/v1/indexes/delete"
 
-    return embeddings.tolist()
+    resp = requests.post(
+        url,
+        headers=HEADERS,
+        json={
+            "index_name": index_name,
+            "index_key": INDEX_KEY_BYTES.hex()
+        },
+        timeout=120
+    )
+
+    if resp.status_code == 200:
+        logger.info("   - Cleared existing index")
+    elif resp.status_code == 404:
+        logger.info("   - No index to delete")
+    else:
+        raise RuntimeError(f"Delete index failed: {resp.text}")
+
+def create_index_rest(index_name: str, index_key: str):
+    url = f"{CYBORGDB_URL}/v1/indexes/create"
+
+    resp = requests.post(
+        url,
+        headers=HEADERS,
+        json={
+            "index_name": index_name,
+            "index_key": INDEX_KEY_BYTES.hex(),
+            "embedding_model": "all-MiniLM-L6-v2",
+            "index_config": {
+                "type": "ivfflat"   
+            }
+        },
+        timeout=120
+    )
+
+    if resp.status_code == 200:
+        logger.info("✅ Index ready with auto-embedding")
+    elif resp.status_code == 409:
+        logger.info("✅ Index already exists")
+    else:
+        raise RuntimeError(f"Create index failed: {resp.text}")
 
 
+# =========================
+# SECURITY HELPERS
+# =========================
 def encrypt_metadata(metadata):
     return cipher_suite.encrypt(json.dumps(metadata).encode()).decode()
-
 
 def decrypt_metadata(token):
     try:
@@ -111,63 +145,97 @@ def decrypt_metadata(token):
         return {}
 
 # =========================
+# DB SETUP
+# =========================
+logger.info(f"🔌 Connecting to index: {INDEX_NAME}")
+
+try:
+    delete_index_rest(INDEX_NAME, INDEX_KEY_BYTES)
+    time.sleep(1)
+    logger.info("   - Cleared existing index")
+except Exception:
+    logger.info("   - No index to delete")
+
+try:
+    config = IndexIVFFlatModel(
+        dimension=768,
+        metric="cosine",
+        embedding_model="sentence-transformers/all-mpnet-base-v2"
+    )
+    create_index_rest(INDEX_NAME, INDEX_KEY_BYTES)
+    logger.info("✅ Index ready with auto-embedding")
+except Exception as e:
+    if "already exists" in str(e):
+        logger.info("✅ Index already exists")
+    else:
+        raise
+
+# =========================
 # AUTO SEED
 # =========================
 def seed_database():
-    logger.info("🌱 Seeding database with Clinical demo data...")
-    count = 0
+    logger.info("🌱 Seeding demo encounters...")
+    batch = []
 
     for case in MOCK_DATA:
-        try:
-            redis_client.set(
-                f"encounter:{case['encounter_id']}",
-                json.dumps(case["payload"])
-            )
+        text = f"{case['payload']['diagnosis']} {case['payload']['chief_complaint']}"
+        meta = encrypt_metadata({"hospital_id": case["hospital_id"]})
 
-            text = f"{case['payload']['diagnosis']} {case['payload']['chief_complaint']}"
-            vec = get_embedding(text)
-            meta = encrypt_metadata({"hospital_id": case["hospital_id"]})
+        redis_client.set(
+            f"encounter:{case['encounter_id']}",
+            json.dumps(case["payload"])
+        )
 
-            vector_index.upsert([{
-                "id": f"encounter:{case['encounter_id']}",
-                "vector": vec,
-                "metadata": {"secure_blob": meta}
-            }])
+        batch.append({
+            "id": f"encounter:{case['encounter_id']}",
+            "contents": text,
+            "metadata": {"secure_blob": meta}
+        })
 
-            count += 1
+    cyborgdb_upsert(batch)
+    logger.info(f"✨ Seeded {len(batch)} encounters")
 
-        except Exception as e:
-            logger.error(f"❌ Seed failed {case['encounter_id']}: {e}")
-
-    logger.info(f"✨ Seeded {count} encounters.")
-
-# =========================
-# DB SETUP
-# =========================
-logger.info(f"🔌 Initializing index {INDEX_NAME}")
-
-try:
-    vector_client.delete_index(INDEX_NAME)
-    time.sleep(1)
-except Exception:
-    pass
-
-config = IndexIVFFlatModel(dimension=768, n_lists=1, metric="cosine")
-vector_index = vector_client.create_index(INDEX_NAME, index_key_bytes, config)
 seed_database()
 
 # =========================
 # REASONING
 # =========================
+def stringify_object_ids(obj):
+    if isinstance(obj, dict):
+        return {k: stringify_object_ids(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [stringify_object_ids(i) for i in obj]
+    elif hasattr(obj, "__class__") and obj.__class__.__name__ == "ObjectId":
+        return str(obj)
+    else:
+        return obj
+
 def synthesize_answer(query, encounters):
     evidence = ""
     for i, e in enumerate(encounters):
-        d = e["encounter"]
+        enc_data = e["encounter"]
+
+        # Check if summary exists (new format)
+        summary = enc_data.get("summary", {})
+        raw = enc_data.get("raw_encounter", enc_data)  # fallback for old format
+
+        # Use normalized summary if available, else fallback
+        diagnosis = summary.get("diagnoses") or raw.get("diagnoses")
+        treatment = raw.get("treatment") or "N/A"
+        outcome = raw.get("outcome") or "N/A"
+        chief_complaint = summary.get("chief_complaint") or raw.get("chief_complaint") or "-"
+
+        # Convert diagnoses list to string if it's a list
+        if isinstance(diagnosis, list):
+            diagnosis = ", ".join(diagnosis)
+        elif diagnosis is None:
+            diagnosis = "N/A"
+
         evidence += (
-            f"Case {i+1}: Diagnosis={d.get('diagnosis')} "
-            f"Treatment={d.get('treatment')} "
-            f"Outcome={d.get('outcome')} "
-            f"Complaint={d.get('chief_complaint')}\n"
+            f"Case {i+1}: Diagnosis={diagnosis} "
+            f"Treatment={treatment} "
+            f"Outcome={outcome} "
+            f"Complaint={chief_complaint}\n"
         )
 
     prompt = f"""
@@ -185,13 +253,14 @@ Return exactly:
 """
 
     try:
-        response = gemini_model.generate_content(prompt)
-        text = response.text
+        res = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+        text = res.text
 
         def extract(tag):
-            if tag in text:
-                return text.split(tag)[1].split("[", 1)[0].strip()
-            return "N/A"
+            return text.split(tag)[1].split("[", 1)[0].strip() if tag in text else "N/A"
 
         return {
             "clinical_insights": extract("[INSIGHTS]"),
@@ -201,61 +270,223 @@ Return exactly:
 
     except Exception as e:
         logger.error(e)
-        return {}
+        return {
+            "clinical_insights": "Unavailable",
+            "management_outcomes": "N/A",
+            "suggested_next_steps": "Manual review required"
+        }
 
+def normalize_encounter_with_gemini(encounter: dict) -> dict:
+    prompt = f"""
+You are a clinical data normalization engine.
+
+Return ONLY valid JSON.
+Do NOT include markdown.
+Do NOT include explanations.
+
+Required keys:
+- narrative_summary
+- diagnoses
+- chief_complaint
+- key_findings
+- medications
+- abnormal_labs
+- imaging_findings
+- plan_and_outcome
+
+Encounter JSON:
+{json.dumps(encounter, indent=2)}
+"""
+
+    try:
+        res = genai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
+
+        text = res.text
+
+        if not text:
+            raise RuntimeError("Empty Gemini response")
+
+        text = text.strip()
+
+        if text.startswith("```"):
+            text = text.split("```")[1]
+
+        start = text.find("{")
+        end = text.rfind("}")
+
+        if start == -1 or end == -1:
+            raise RuntimeError("No JSON object found")
+
+        clean_json = text[start:end + 1]
+
+        return json.loads(clean_json)
+
+    except Exception as e:
+        logger.error("Gemini normalization failed: %s", e)
+
+        return {
+            "narrative_summary": "",
+            "diagnoses": [],
+            "chief_complaint": encounter.get("chief_complaint", ""),
+            "key_findings": "",
+            "medications": [],
+            "abnormal_labs": [],
+            "imaging_findings": [],
+            "plan_and_outcome": ""
+        }
+    
 # =========================
 # ROUTES
 # =========================
 @app.route("/upsert-encounter", methods=["POST"])
-def upsert():
-    d = request.json
-    redis_client.set(f"encounter:{d['encounter_id']}", json.dumps(d["payload"]))
+def upsert_encounter():
+    raw_encounter = request.json
 
-    vec = get_embedding(
-        f"{d['payload']['diagnosis']} {d['payload']['chief_complaint']}"
+    encounter = stringify_object_ids(raw_encounter)
+
+    encounter_id = encounter.get("_id") or encounter.get("encounter_id")
+    hospital_id = encounter.get("hospital")
+
+    if not encounter_id or not hospital_id:
+        return jsonify({"error": "encounter_id or hospital_id missing"}), 400
+
+    encounter["_id"] = str(encounter_id)
+    encounter["hospital"] = str(hospital_id)
+
+    # 1. Normalize using Gemini
+    normalized = normalize_encounter_with_gemini(encounter)
+
+    # 2. Store structured summary in Redis
+    redis_client.set(
+        f"encounter:{encounter_id}",
+        json.dumps({
+            "raw_encounter": encounter,
+            "summary": normalized
+        })
     )
 
-    meta = encrypt_metadata({"hospital_id": d["hospital_id"]})
+    # 3. Build semantic text
+    semantic_text = f"""
+Chief Complaint:
+{normalized.get('chief_complaint', '-')}
 
-    vector_index.upsert([{
-        "id": f"encounter:{d['encounter_id']}",
-        "vector": vec,
-        "metadata": {"secure_blob": meta}
+Diagnoses:
+{", ".join(normalized.get("diagnoses", []))}
+
+Key Findings:
+{normalized.get("key_findings", "-")}
+
+Medications:
+{json.dumps(normalized.get("medications", []), indent=2)}
+
+Abnormal Labs:
+{json.dumps(normalized.get("abnormal_labs", []), indent=2)}
+
+Imaging:
+{json.dumps(normalized.get("imaging_findings", []), indent=2)}
+
+Plan & Outcome:
+{normalized.get("plan_and_outcome", "-")}
+"""
+
+    # 4. Encrypt metadata (🔥 FIXED)
+    meta = encrypt_metadata({
+        "hospital_id": hospital_id,
+        "encounter_id": encounter_id
+    })
+
+    # 5. Upsert into CyborgDB (AUTO EMBEDDING)
+    cyborgdb_upsert([{
+        "id": f"encounter:{encounter_id}",
+        "contents": semantic_text,
+        "metadata": {
+            "secure_blob": meta
+        }
     }])
 
-    return jsonify({"status": "stored"})
-
+    return jsonify({
+        "status": "stored",
+        "encounter_id": encounter_id
+    })
 
 @app.route("/search-advanced", methods=["POST"])
 def search():
     d = request.json
-    q_vec = get_embedding(d["query"])
+    query_text = d.get("query", "")
 
-    results = vector_index.query(q_vec, top_k=10)
+    # 1️⃣ Call CyborgDB REST API (AUTO-EMBED)
+    resp = requests.post(
+        f"{CYBORGDB_URL}/v1/vectors/query",
+        headers={
+            "Content-Type": "application/json",
+            "X-API-Key": CYBORG_API_KEY
+        },
+        json={
+            "index_name": INDEX_NAME,
+            "index_key": INDEX_KEY_BYTES.hex(),
+            "query_contents": query_text,  
+            "top_k": 10,
+            "include": ["distance", "metadata"]
+        },
+        timeout=120
+    )
+
+    if not resp.ok:
+        return jsonify({
+            "error": "Vector search failed",
+            "details": resp.text
+        }), 500
+
+    results = resp.json().get("results", [])
     matches = []
 
     for r in results:
-        meta = decrypt_metadata(r["metadata"]["secure_blob"])
-        if d.get("scope") == "local" and meta.get("hospital_id") != d.get("hospital_id"):
+        meta_enc = r.get("metadata", {}).get("secure_blob")
+        if not meta_enc:
             continue
 
+        # 2️⃣ Decrypt metadata
+        meta = decrypt_metadata(meta_enc)
+
+        # 3️⃣ Scope filtering
+        if d.get("scope") == "local":
+            if meta.get("hospital_id") != d.get("hospital_id"):
+                continue
+
         eid = r["id"].replace("encounter:", "")
-        data = redis_client.get(f"encounter:{eid}")
 
-        if data:
-            matches.append({
-                "encounter_id": eid,
-                "hospital_id": meta.get("hospital_id"),
-                "encounter": json.loads(data),
-                "score": float(r.get("score", 0))
-            })
+        # 4️⃣ Fetch hydrated encounter from Redis
+        enc_data = redis_client.get(f"encounter:{eid}")
+        if not enc_data:
+            continue
 
+        enc_data = json.loads(enc_data)
+
+        # 5️⃣ Flatten encounter: combine raw_encounter + summary for consistent format
+        raw = enc_data.get("raw_encounter", enc_data)  # fallback for old format
+        summary = enc_data.get("summary", {})
+        flattened_encounter = {**raw, **summary}
+
+        matches.append({
+            "encounter_id": eid,
+            "hospital_id": meta.get("hospital_id"),
+            "encounter": flattened_encounter,
+            "score": float(r.get("distance", 0))
+        })
+
+    # 6️⃣ Take top 5 matches
     final = matches[:5]
+
+    # 7️⃣ Generate synthesis using the flattened encounters
+    synthesis = synthesize_answer(query_text, final) if final else {}
+
     return jsonify({
         "matches": final,
-        "synthesis": synthesize_answer(d["query"], final)
+        "synthesis": synthesis
     })
-
 
 if __name__ == "__main__":
     app.run(port=7000)

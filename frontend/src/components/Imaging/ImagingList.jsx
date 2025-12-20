@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 
+/* =====================================================
+   COMPONENT
+===================================================== */
 export const ImagingList = () => {
   const navigate = useNavigate();
-  const { user } = useApp();
 
   const [imaging, setImaging] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -19,27 +20,22 @@ export const ImagingList = () => {
 
   /* =====================================================
      NORMALIZER (API → UI SHAPE)
+     Backend is source of truth
   ===================================================== */
-  const normalizeImaging = (list = []) =>
-    list.map((i) => {
-      const nameParts = (i.patientName || '').split(' ');
-      return {
-        _id: i._id,
+  const normalizeImaging = (rows = []) =>
+    rows.map((r) => ({
+      _id: r._id,
 
-        patient: {
-          firstName: nameParts[0] || '',
-          lastName: nameParts.slice(1).join(' ') || '',
-          hospitalId: '',
-        },
+      patientName: r.patientName || null,
 
-        modality: i.imagingType || '-',
-        report: i.resultSummary || '',
-        performedAt: i.createdAt,
-        reportedAt: i.createdAt,
+      modality: r.modality,
+      report: r.report,
+      performedAt: r.performedAt,
+      reportedAt: r.reportedAt,
 
-        images: [],
-      };
-    });
+      images: r.images || [],
+      createdAt: r.createdAt,
+    }));
 
   /* =====================================================
      FETCH
@@ -47,7 +43,6 @@ export const ImagingList = () => {
   const fetchImaging = async () => {
     try {
       const res = await api.getImagingReports();
-      console.log('Imaging fetched:', res?.data);
 
       const raw =
         res?.data?.imagingReports ||
@@ -56,6 +51,7 @@ export const ImagingList = () => {
 
       const normalized = normalizeImaging(raw);
       setImaging(normalized);
+      setFiltered(normalized);
     } catch (err) {
       console.error(err);
       toast.error('Failed to fetch imaging records');
@@ -74,18 +70,20 @@ export const ImagingList = () => {
   useEffect(() => {
     const q = search.toLowerCase();
 
-    setFiltered(
-      q
-        ? imaging.filter((i) => {
-            const patientName =
-              `${i.patient?.firstName || ''} ${i.patient?.lastName || ''}`.toLowerCase();
+    if (!q) {
+      setFiltered(imaging);
+      return;
+    }
 
-            return (
-              patientName.includes(q) ||
-              (i.modality || '').toLowerCase().includes(q)
-            );
-          })
-        : imaging
+    setFiltered(
+      imaging.filter((i) => {
+        const patientName = i.patientName.toLowerCase();
+
+        return (
+          patientName.includes(q) ||
+          (i.modality || '').toLowerCase().includes(q)
+        );
+      })
     );
   }, [search, imaging]);
 
@@ -143,7 +141,7 @@ export const ImagingList = () => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by patient name or modality..."
+            placeholder="Search by patient or modality..."
             className="pl-10 w-full py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -157,7 +155,7 @@ export const ImagingList = () => {
               <th className="px-6 py-3 text-left text-sm font-semibold">Patient</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Modality</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Report</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold">Performed At</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold">Performed</th>
               <th className="px-6 py-3 text-left text-sm font-semibold">Actions</th>
             </tr>
           </thead>
@@ -167,21 +165,21 @@ export const ImagingList = () => {
               filtered.map((item) => (
                 <tr key={item._id} className="border-b hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium">
-                    {item.patient.firstName
-                      ? `${item.patient.firstName} ${item.patient.lastName}`
+                    {item.patientName
+                      ? item.patientName
                       : 'N/A'}
                   </td>
 
                   <td className="px-6 py-4">{item.modality}</td>
 
                   <td className="px-6 py-4 text-gray-500 truncate max-w-xs">
-                    {item.report || 'N/A'}
+                    {item.report || '—'}
                   </td>
 
                   <td className="px-6 py-4 text-gray-500">
                     {item.performedAt
                       ? new Date(item.performedAt).toLocaleDateString()
-                      : 'N/A'}
+                      : '—'}
                   </td>
 
                   <td className="px-6 py-4 flex gap-3">
@@ -196,7 +194,10 @@ export const ImagingList = () => {
                       <Edit size={18} className="text-green-600" />
                     </button>
 
-                    <button onClick={() => handleDelete(item._id)} title="Delete">
+                    <button
+                      onClick={() => handleDelete(item._id)}
+                      title="Delete"
+                    >
                       <Trash2 size={18} className="text-red-600" />
                     </button>
                   </td>
@@ -229,17 +230,23 @@ export const ImagingList = () => {
             <div className="space-y-2 text-sm">
               <p>
                 <strong>Patient:</strong>{' '}
-                {selectedImaging.patient.firstName
-                  ? `${selectedImaging.patient.firstName} ${selectedImaging.patient.lastName}`
+                {selectedImaging.patientName
+                  ? selectedImaging.patientName
                   : 'N/A'}
               </p>
 
               <p><strong>Modality:</strong> {selectedImaging.modality}</p>
+
               <p>
                 <strong>Performed At:</strong>{' '}
-                {selectedImaging.performedAt
-                  ? new Date(selectedImaging.performedAt).toLocaleString()
-                  : 'N/A'}
+                {new Date(selectedImaging.performedAt).toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Reported At:</strong>{' '}
+                {selectedImaging.reportedAt
+                  ? new Date(selectedImaging.reportedAt).toLocaleString()
+                  : '—'}
               </p>
             </div>
 
@@ -248,7 +255,7 @@ export const ImagingList = () => {
             <div>
               <h3 className="font-semibold mb-2">Report</h3>
               <p className="text-gray-700 whitespace-pre-line">
-                {selectedImaging.report || 'No report provided.'}
+                {selectedImaging.report || 'No report available.'}
               </p>
             </div>
           </div>
