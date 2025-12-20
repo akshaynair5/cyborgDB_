@@ -65,6 +65,7 @@ export const CyborgSearch = () => {
         ...r,
         encounter: flattenEncounter(r.encounter),
       }));
+      console.log('Cyborg search results:', flattenedMatches);
       setResults(flattenedMatches);
       setSynthesis(data.synthesis || null);
     } catch (err) {

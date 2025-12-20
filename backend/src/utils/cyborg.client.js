@@ -32,6 +32,7 @@ export async function upsertEncounter(encounter) {
 
     return await res.json();
   } catch (err) {
+    console.log(err);
     console.warn(
       'cyborg.client.upsertEncounter error',
       err?.message || err
