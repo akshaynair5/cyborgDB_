@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export const CyborgSearch = () => {
   const [query, setQuery] = useState('');
@@ -15,36 +17,59 @@ export const CyborgSearch = () => {
   const navigate = useNavigate();
   const CyborgDBURL = import.meta.env.VITE_CYBORG_DB_URL || 'http://localhost:7000';
 
-  // Safely render any value
+  /* =========================
+     SAFE RENDER
+  ========================= */
   const safeRender = (value) => {
-    if (!value) return 'N/A';
+    if (value === null || value === undefined || value === '') return 'N/A';
     if (Array.isArray(value)) return value.join(', ');
     if (typeof value === 'object') return JSON.stringify(value, null, 2);
     return String(value);
   };
 
-  // Flatten backend encounter for display
-  const flattenEncounter = (enc) => {
-    if (!enc) return {};
-    const raw = enc.raw_encounter || {};
-    const summary = enc.summary || {};
+  function AIAnalysis({ text }) {
+    if (!text) return null;
+
+    return (
+      <div className="prose prose-sm max-w-none bg-slate-50 p-4 rounded-lg border">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {text}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
+  /* =========================
+     NORMALIZE ENCOUNTER
+     (KEY FIX)
+  ========================= */
+  const normalizeEncounter = (enc = {}) => {
+    const diagnoses =
+      Array.isArray(enc.diagnoses)
+        ? enc.diagnoses
+        : enc.diagnosis
+        ? [enc.diagnosis]
+        : [];
+
     return {
-      ...raw,
-      ...summary,
-      diagnosis: summary.diagnoses ? summary.diagnoses.join(', ') : raw.diagnosis || 'N/A',
-      treatment: summary.plan_and_outcome || raw.treatment || 'N/A',
-      outcome: summary.plan_and_outcome || raw.outcome || 'N/A',
-      chief_complaint: summary.chief_complaint || raw.chief_complaint || 'N/A',
-      medications: summary.medications || raw.medications || [],
+      ...enc,
+      diagnosis: diagnoses.join(', ') || 'N/A',
+      chief_complaint: enc.chief_complaint || enc.chiefComplaint || 'N/A',
+      treatment: enc.treatment || enc.plan_and_outcome || 'N/A',
+      outcome: enc.outcome || enc.plan_and_outcome || 'N/A',
+      medications: enc.medications || [],
     };
   };
 
-  // Perform search
+  /* =========================
+     SEARCH
+  ========================= */
   const doSearch = async () => {
     if (!query.trim()) {
       toast.error('Enter a search query');
       return;
     }
+
     setLoading(true);
     setResults(null);
     setSynthesis(null);
@@ -59,14 +84,21 @@ export const CyborgSearch = () => {
           hospital_id: user.hospital,
         }),
       });
-      if (!response.ok) throw new Error(`Backend error: ${response.statusText}`);
+
+      if (!response.ok) {
+        throw new Error(`Backend error: ${response.statusText}`);
+      }
+
       const data = await response.json();
-      const flattenedMatches = (data.matches || []).map((r) => ({
+
+      const normalized = (data.matches || []).map((r) => ({
         ...r,
-        encounter: flattenEncounter(r.encounter),
+        encounter: normalizeEncounter(r.encounter),
       }));
-      console.log('Cyborg search results:', flattenedMatches);
-      setResults(flattenedMatches);
+
+      console.log('Cyborg search results:', normalized);
+
+      setResults(normalized);
       setSynthesis(data.synthesis || null);
     } catch (err) {
       console.error('Cyborg search failed', err);
@@ -76,16 +108,18 @@ export const CyborgSearch = () => {
     }
   };
 
-  // Full encounter modal
+  /* =========================
+     STRUCTURED VIEW
+  ========================= */
   function StructuredEncounterView({ data }) {
     if (!data) return <div>No Data</div>;
+
     return (
       <div className="space-y-4 text-sm">
-        {/* Basic Info */}
         <div className="grid grid-cols-2 gap-4">
           <div className="p-3 bg-blue-50/50 rounded border border-blue-100">
             <span className="block text-xs font-bold text-blue-500 uppercase">Date</span>
-            {String(data.startedAt || 'N/A')}
+            {safeRender(data.startedAt)}
           </div>
           <div className="p-3 bg-green-50/50 rounded border border-green-100">
             <span className="block text-xs font-bold text-green-600 uppercase">Outcome</span>
@@ -93,7 +127,6 @@ export const CyborgSearch = () => {
           </div>
         </div>
 
-        {/* Complaint & Treatment */}
         <div className="grid grid-cols-2 gap-4">
           <div className="p-3 bg-gray-50 rounded border border-gray-100">
             <span className="block text-xs font-bold text-gray-500 uppercase">Treatment</span>
@@ -105,13 +138,11 @@ export const CyborgSearch = () => {
           </div>
         </div>
 
-        {/* Diagnoses */}
         <div className="p-3 bg-white rounded border border-gray-200">
           <span className="block text-xs font-bold text-gray-500 uppercase">Diagnosis</span>
           {safeRender(data.diagnosis)}
         </div>
 
-        {/* Vitals */}
         {data.vitals && (
           <div className="p-3 bg-slate-50 rounded border border-slate-200">
             <span className="block text-xs font-bold text-slate-500 uppercase mb-2">Vitals</span>
@@ -119,48 +150,46 @@ export const CyborgSearch = () => {
               {Object.entries(data.vitals).map(([k, v]) => (
                 <div key={k} className="flex justify-between border-b py-1">
                   <span className="capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
-                  <span className="font-medium">{v}</span>
+                  <span className="font-medium">{safeRender(v)}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Prescriptions */}
         {data.prescriptions?.length > 0 && (
           <div className="p-3 bg-white rounded border border-gray-200">
             <span className="block text-xs font-bold text-gray-500 uppercase mb-2">Prescriptions</span>
             <ul className="list-disc list-inside text-xs">
-              {data.prescriptions.map((p) => (
-                <li key={p._id}>
-                  {p.items.map((item) => (
-                    <span key={item.name}>
-                      {item.name} {item.dosage} {item.frequency} for {item.durationDays} days
-                    </span>
-                  ))}
-                </li>
-              ))}
+              {data.prescriptions.map((p) =>
+                p.items.map((item) => (
+                  <li key={item.name}>
+                    {item.name} {item.dosage} {item.frequency} for {item.durationDays} days
+                  </li>
+                ))
+              )}
             </ul>
           </div>
         )}
 
-        {/* Narrative Summary */}
         {data.narrative_summary && (
           <div className="p-3 bg-blue-50/50 rounded border border-blue-100">
-            <span className="block text-xs font-bold text-blue-500 uppercase mb-1">Narrative Summary</span>
+            <span className="block text-xs font-bold text-blue-500 uppercase mb-1">
+              Narrative Summary
+            </span>
             {safeRender(data.narrative_summary)}
           </div>
         )}
 
-        {/* Notes */}
         {data.notes && (
           <div className="p-3 bg-gray-50 rounded border border-gray-100">
-            <span className="block text-xs font-bold text-gray-500 uppercase mb-1">Clinical Notes</span>
+            <span className="block text-xs font-bold text-gray-500 uppercase mb-1">
+              Clinical Notes
+            </span>
             {safeRender(data.notes)}
           </div>
         )}
 
-        {/* Collapsible Raw JSON */}
         <div className="p-3 bg-slate-50 rounded border border-slate-200">
           <button
             onClick={() => setShowRaw(!showRaw)}
@@ -228,16 +257,16 @@ export const CyborgSearch = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
               <h4 className="font-bold text-blue-800 text-xs mb-2 uppercase tracking-wide">Clinical Insights</h4>
-              <p className="text-gray-700 text-sm leading-relaxed">{safeRender(synthesis.clinical_insights)}</p>
+              <AIAnalysis text={synthesis.clinical_insights} />
             </div>
             <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
               <h4 className="font-bold text-green-700 text-xs mb-2 uppercase tracking-wide">Outcomes & Management</h4>
-              <p className="text-gray-700 text-sm leading-relaxed">{safeRender(synthesis.management_outcomes)}</p>
+              <AIAnalysis text={synthesis.management_outcomes} />
             </div>
           </div>
           <div className="bg-white p-4 rounded-lg border border-purple-100 shadow-sm border-l-4 border-l-purple-500">
             <h4 className="font-bold text-purple-700 text-xs mb-2 uppercase tracking-wide">Suggested Next Steps</h4>
-            <p className="text-gray-700 text-sm">{safeRender(synthesis.suggested_next_steps)}</p>
+            <AIAnalysis text={synthesis.suggested_next_steps} />
           </div>
         </div>
       )}

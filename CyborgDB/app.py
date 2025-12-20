@@ -295,24 +295,20 @@ def stringify_object_ids(obj):
 
 def synthesize_answer(query, encounters):
     evidence = ""
+
     for i, e in enumerate(encounters):
-        enc_data = e["encounter"]
+        enc = e["encounter"]
 
-        # Check if summary exists (new format)
-        summary = enc_data.get("summary", {})
-        raw = enc_data.get("raw_encounter", enc_data)  # fallback for old format
+        raw = enc.get("raw_encounter", {})
+        summary = enc.get("summary", {})
 
-        # Use normalized summary if available, else fallback
-        diagnosis = summary.get("diagnoses") or raw.get("diagnoses")
-        treatment = raw.get("treatment") or "N/A"
-        outcome = raw.get("outcome") or "N/A"
-        chief_complaint = summary.get("chief_complaint") or raw.get("chief_complaint") or "-"
+        diagnosis = summary.get("diagnoses", [])
+        chief_complaint = summary.get("chief_complaint", "-")
+        treatment = raw.get("treatment", "N/A")
+        outcome = raw.get("outcome", "N/A")
 
-        # Convert diagnoses list to string if it's a list
         if isinstance(diagnosis, list):
             diagnosis = ", ".join(diagnosis)
-        elif diagnosis is None:
-            diagnosis = "N/A"
 
         evidence += (
             f"Case {i+1}: Diagnosis={diagnosis} "
@@ -524,6 +520,7 @@ def search():
         }), 500
 
     results = resp.json().get("results", [])
+    print(f"🔎 Search returned {results}")
     matches = []
 
     for r in results:
